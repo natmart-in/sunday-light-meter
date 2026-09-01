@@ -1,6 +1,6 @@
 # Light Meter for the Opple Light Master 3 & 4
 
-Web Bluetooth light meter for the Opple Light Master 3 and 4: lux, colour temperature, Duv, tint, CRI (Ra, R1-R14), melanopic lux and circadian stimulus, live in the browser. Log readings, export CSV. Nothing leaves your browser.
+Web Bluetooth light meter for the Opple Light Master 3 and 4: lux, colour temperature, Duv, tint, CRI (Ra, R1-R14), melanopic lux and circadian stimulus, live in the browser. Log readings, export CSV.
 
 **Use it:** https://sundaylight.cc/pages/light-meter
 
