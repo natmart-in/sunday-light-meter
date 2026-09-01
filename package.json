@@ -1,0 +1,17 @@
+{
+  "name": "sunday-light-meter",
+  "version": "1.0.0",
+  "description": "Web Bluetooth light meter for the Opple Light Master 3 and 4 - lux, CCT, Duv, CRI - with a Sunday Light calibration check",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs",
+    "serve": "python3 -m http.server 8080"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natmart-in/sunday-light-meter"
+  },
+  "license": "MIT"
+}

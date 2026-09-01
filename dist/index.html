@@ -1,0 +1,2565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sunday Light Meter</title>
+  <meta name="description" content="Read lux, colour temperature, Duv and CRI from an Opple Light Master 3 or 4 in your browser, and check how accurately a Sunday light hits the colour you set.">
+  <meta name="theme-color" content="#fffbf5">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='40%25' cy='38%25' r='60%25'%3E%3Cstop offset='0' stop-color='%23fff3b0'/%3E%3Cstop offset='.55' stop-color='%23f7d94c'/%3E%3Cstop offset='1' stop-color='%23e86b3a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='28' fill='url(%23g)'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+/* Sunday Light Meter - scoped under .slm so it can sit inside the Shopify theme. */
+
+.slm {
+  --slm-cream: #fffbf5;
+  --slm-cream-dark: #f5ebe0;
+  --slm-cream-deep: #efe2d3;
+  --slm-yellow: #f7d94c;
+  --slm-orange: #e86b3a;
+  --slm-orange-dark: #c2582d;
+  --slm-magenta: #c43d6e;
+  --slm-charcoal: #292524;
+  --slm-dark: #44403c;
+  --slm-gray: #78716c;
+  --slm-muted: #a8a29e;
+  --slm-white: #ffffff;
+  --slm-ok: #5a9e6f;
+  --slm-heading: var(--sunday-heading, 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif);
+  --slm-body: var(--sunday-body, 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif);
+  --slm-radius: 20px;
+  --slm-shadow: 0 10px 40px rgba(232, 107, 58, 0.08), 0 1px 2px rgba(41, 37, 36, 0.06);
+
+  font-family: var(--slm-body);
+  color: var(--slm-dark);
+  line-height: 1.6;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px 48px;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+.slm *, .slm *::before, .slm *::after { box-sizing: border-box; }
+.slm h2, .slm h3 { font-family: var(--slm-heading); color: var(--slm-charcoal); letter-spacing: -0.02em; line-height: 1.15; margin: 0; }
+.slm p { margin: 0; }
+.slm a { color: var(--slm-orange-dark); }
+.slm small { color: var(--slm-gray); font-weight: 400; }
+.slm [hidden] { display: none !important; }
+
+/* buttons */
+.slm__btn {
+  font-family: var(--slm-body); font-size: 15px; font-weight: 500; line-height: 1;
+  border-radius: 9999px; padding: 14px 26px; cursor: pointer; border: 1.5px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, background 0.2s ease, border-color 0.2s ease;
+  color: var(--slm-charcoal); background: transparent;
+}
+.slm__btn:disabled { opacity: 0.45; cursor: default; }
+.slm__btn--primary {
+  background: linear-gradient(135deg, var(--slm-yellow) 0%, var(--slm-orange) 100%);
+  color: var(--slm-white); box-shadow: 0 8px 28px rgba(232, 107, 58, 0.28);
+}
+.slm__btn--primary:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 12px 36px rgba(232, 107, 58, 0.38); }
+.slm__btn--ghost { border-color: var(--slm-charcoal); }
+.slm__btn--ghost:not(:disabled):hover { background: var(--slm-charcoal); color: var(--slm-cream); }
+.slm__btn--link { padding: 8px 4px; color: var(--slm-orange-dark); text-decoration: underline; text-underline-offset: 3px; font-weight: 400; }
+.slm__btn--sm { padding: 9px 16px; font-size: 13px; }
+
+/* notice */
+.slm__notice {
+  background: var(--slm-cream-dark); border-left: 4px solid var(--slm-orange); border-radius: 10px;
+  padding: 14px 18px; margin: 0 0 20px; font-size: 14.5px; color: var(--slm-dark);
+}
+
+/* connection row */
+.slm__connect { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 22px; }
+.slm__connect-left { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.slm__status { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--slm-gray); flex-wrap: wrap; }
+.slm__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--slm-muted); flex: none; transition: background 0.3s, box-shadow 0.3s; }
+.slm__dot--connected { background: var(--slm-ok); box-shadow: 0 0 0 4px rgba(90, 158, 111, 0.18); }
+.slm__dot--connecting, .slm__dot--requesting, .slm__dot--calibrating, .slm__dot--reconnecting { background: var(--slm-yellow); animation: slm-pulse 1.1s ease-in-out infinite; }
+.slm__dot--warning { background: var(--slm-orange); }
+.slm__chip { font-size: 12px; font-weight: 500; letter-spacing: 0.02em; padding: 4px 10px; border-radius: 999px; background: var(--slm-cream-dark); color: var(--slm-dark); }
+.slm__chip--warn { background: rgba(196, 61, 110, 0.12); color: var(--slm-magenta); }
+@keyframes slm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* live panel */
+.slm__live {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1.05fr); grid-template-areas: 'sun hero metrics' 'spectrum spectrum spectrum';
+  gap: 20px 32px; align-items: center;
+  background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius);
+  box-shadow: var(--slm-shadow); padding: 30px 34px 26px; margin: 0 0 30px; position: relative; overflow: hidden;
+}
+.slm__live::before {
+  content: ''; position: absolute; inset: -40% -20% auto auto; width: 60%; aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(247, 217, 76, 0.16), rgba(247, 217, 76, 0));
+}
+.slm__sun-wrap { grid-area: sun; display: flex; align-items: center; justify-content: center; }
+.slm__sun {
+  --sun: #f3e5cf; --glow: 0;
+  width: 168px; height: 168px; border-radius: 50%; position: relative;
+  background: radial-gradient(circle at 42% 38%, #fff 0%, var(--sun) 55%, color-mix(in srgb, var(--sun) 80%, #c2582d) 100%);
+  box-shadow: 0 0 0 1px rgba(41, 37, 36, 0.05), 0 0 calc(30px + 70px * var(--glow)) calc(6px + 22px * var(--glow)) color-mix(in srgb, var(--sun) calc(60% * var(--glow)), transparent);
+  transition: background 0.6s ease, box-shadow 0.6s ease;
+}
+.slm__sun:not(.slm__sun--lit) { background: radial-gradient(circle at 42% 38%, #fff, var(--slm-cream-dark)); }
+.slm__sun:not(.slm__sun--lit)::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 1.5px dashed var(--slm-cream-deep); }
+.slm__sun--lit { animation: slm-breathe 6s ease-in-out infinite; }
+.slm__sun-core { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.35), transparent 60%); }
+@keyframes slm-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.025); } }
+
+.slm__hero { grid-area: hero; min-width: 0; }
+.slm__hero-value { font-family: var(--slm-heading); font-weight: 500; font-size: clamp(56px, 8vw, 84px); letter-spacing: -0.04em; line-height: 1; color: var(--slm-charcoal); display: flex; align-items: baseline; gap: 8px; }
+.slm__hero-unit { font-size: 0.42em; color: var(--slm-gray); font-weight: 400; letter-spacing: 0; }
+.slm__hero-label { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--slm-gray); margin-top: 8px; }
+.slm__mode { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.slm__hero-sub { margin-top: 14px; font-size: 15px; color: var(--slm-gray); }
+.slm__hero-sub b { color: var(--slm-charcoal); font-weight: 600; }
+
+.slm__metrics { grid-area: metrics; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.slm__metrics > div { border-top: 1.5px solid var(--slm-cream-dark); padding-top: 8px; min-width: 0; }
+.slm__metrics dt { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slm__metrics dt small { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.slm__metrics dd { margin: 2px 0 0; font-family: var(--slm-heading); font-size: 24px; font-weight: 500; color: var(--slm-charcoal); letter-spacing: -0.02em; line-height: 1.2; }
+.slm__metrics dd.slm__small { font-size: 15px; font-family: var(--slm-body); font-weight: 500; }
+.slm__metrics dd.slm__rlist { font-size: 12px; font-family: var(--slm-body); font-weight: 400; color: var(--slm-gray); letter-spacing: 0.02em; word-spacing: 0.15em; line-height: 1.5; }
+
+.slm__spectrum { grid-area: spectrum; display: flex; gap: 8px; align-items: flex-end; height: 74px; padding-top: 12px; border-top: 1.5px solid var(--slm-cream-dark); }
+.slm__spectrum:empty { display: none; }
+.slm__band { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.slm__band-bar { width: 100%; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
+.slm__band span { font-size: 10px; color: var(--slm-muted); letter-spacing: 0.04em; }
+
+/* check section */
+.slm__check { background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius); padding: 34px 34px 30px; }
+.slm__check-head h2 { font-size: clamp(26px, 3.5vw, 34px); font-weight: 500; }
+.slm__check-head p { max-width: 62ch; margin-top: 10px; color: var(--slm-gray); font-size: 15.5px; }
+.slm__check-grid { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 32px 40px; margin-top: 26px; align-items: start; }
+.slm__form { display: flex; flex-direction: column; gap: 18px; }
+.slm__field > span { display: block; font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray); margin-bottom: 8px; }
+.slm__field small { display: block; margin-top: 6px; font-size: 13px; }
+.slm__range { display: flex; align-items: center; gap: 14px; }
+.slm__range input[type='range'] { flex: 1; accent-color: var(--slm-orange); height: 28px; }
+.slm__range output { font-family: var(--slm-heading); font-weight: 500; font-size: 18px; color: var(--slm-charcoal); min-width: 72px; text-align: right; letter-spacing: -0.02em; }
+.slm__field select {
+  width: 100%; font: inherit; font-size: 15px; color: var(--slm-charcoal); background: var(--slm-white);
+  border: 1.5px solid var(--slm-cream-deep); border-radius: 12px; padding: 11px 14px; appearance: auto;
+}
+.slm__field select:focus { outline: none; border-color: var(--slm-orange); }
+.slm__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.slm__ambient { font-size: 13.5px; color: var(--slm-gray); min-height: 1em; }
+.slm__ambient b { color: var(--slm-charcoal); }
+.slm__tips { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--slm-gray); display: flex; flex-direction: column; gap: 4px; }
+.slm__tips li::marker { color: var(--slm-orange); }
+
+.slm__chart-wrap { background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: 16px; padding: 14px 14px 10px; }
+.slm__chart-wrap svg { display: block; width: 100%; height: auto; }
+.slm__grid { stroke: var(--slm-cream-dark); stroke-width: 1; }
+.slm__tick { font-family: var(--slm-body); font-size: 10.5px; fill: var(--slm-muted); }
+.slm__axis { font-family: var(--slm-body); font-size: 10px; font-weight: 500; letter-spacing: 0.12em; fill: var(--slm-gray); }
+.slm__band-area { fill: rgba(247, 217, 76, 0.22); }
+.slm__ideal { fill: none; stroke: var(--slm-charcoal); stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.55; }
+.slm__die { stroke: var(--slm-magenta); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.7; }
+.slm__empty { font-family: var(--slm-body); font-size: 13px; fill: var(--slm-muted); }
+.slm__pt circle { stroke: var(--slm-white); stroke-width: 2; fill: var(--slm-orange); cursor: pointer; transition: r 0.15s; }
+.slm__pt:hover circle { r: 8; }
+.slm__pt--ok circle { fill: #d4b93a; }
+.slm__pt--off circle { fill: var(--slm-magenta); }
+.slm__pt--dim circle, .slm__pt--ambient circle { fill: var(--slm-muted); }
+.slm__legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 6px 6px 0; font-size: 12px; color: var(--slm-gray); }
+.slm__legend span { display: inline-flex; align-items: center; gap: 7px; }
+.slm__legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
+.slm__legend-line { background: repeating-linear-gradient(90deg, var(--slm-charcoal) 0 4px, transparent 4px 8px); opacity: 0.6; }
+.slm__legend-band { background: rgba(247, 217, 76, 0.5); height: 8px !important; }
+.slm__legend-die { background: repeating-linear-gradient(90deg, var(--slm-magenta) 0 2px, transparent 2px 6px); }
+.slm__legend-dot { width: 10px !important; height: 10px !important; border-radius: 50% !important; background: var(--slm-orange); }
+
+/* results */
+.slm__results { margin-top: 28px; }
+.slm__results-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; color: var(--slm-gray); margin-bottom: 10px; }
+.slm__results-bar b { color: var(--slm-charcoal); }
+.slm__results-actions { display: flex; gap: 8px; }
+.slm__table-wrap { overflow-x: auto; background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: 14px; }
+.slm__table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 720px; }
+.slm__table th { text-align: left; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray); padding: 12px 12px 8px; border-bottom: 1.5px solid var(--slm-cream-dark); white-space: nowrap; }
+.slm__table td { padding: 9px 12px; border-bottom: 1px solid var(--slm-cream-dark); white-space: nowrap; color: var(--slm-dark); }
+.slm__table tr:last-child td { border-bottom: 0; }
+.slm__table td b { color: var(--slm-charcoal); font-weight: 600; }
+.slm__muted { color: var(--slm-muted); }
+.slm__delta { font-weight: 600; }
+.slm__delta--good { color: var(--slm-ok); }
+.slm__delta--ok { color: #b3931f; }
+.slm__delta--off { color: var(--slm-magenta); }
+.slm__delta--dim, .slm__delta--ambient { color: var(--slm-muted); }
+.slm__verdict { display: inline-block; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: var(--slm-cream-dark); color: var(--slm-dark); }
+.slm__verdict--good { background: rgba(90, 158, 111, 0.14); color: #2f6b43; }
+.slm__verdict--ok { background: rgba(247, 217, 76, 0.32); color: #6f5a10; }
+.slm__verdict--off { background: rgba(196, 61, 110, 0.12); color: var(--slm-magenta); }
+.slm__x { border: 0; background: transparent; color: var(--slm-muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+.slm__x:hover { color: var(--slm-magenta); background: var(--slm-cream-dark); }
+
+.slm__foot { margin-top: 26px; font-size: 13px; color: var(--slm-muted); max-width: 78ch; }
+
+/* toast */
+.slm__toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 50;
+  background: var(--slm-charcoal); color: var(--slm-cream); font-size: 14px; padding: 12px 20px; border-radius: 999px;
+  box-shadow: 0 12px 40px rgba(41, 37, 36, 0.3); max-width: min(90vw, 520px); text-align: center;
+  animation: slm-rise 0.3s ease;
+}
+.slm__toast--error { background: var(--slm-magenta); color: #fff; }
+@keyframes slm-rise { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* responsive */
+@media (max-width: 900px) {
+  .slm__live { grid-template-columns: 150px minmax(0, 1fr); grid-template-areas: 'sun hero' 'metrics metrics' 'spectrum spectrum'; padding: 24px; gap: 18px 22px; }
+  .slm__sun { width: 128px; height: 128px; }
+  .slm__check-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .slm { padding: 0 14px 40px; }
+  .slm__live { grid-template-columns: 1fr; grid-template-areas: 'sun' 'hero' 'metrics' 'spectrum'; text-align: center; }
+  .slm__hero-value { justify-content: center; }
+  .slm__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
+  .slm__check { padding: 24px 18px; }
+  .slm__connect { flex-direction: column; align-items: stretch; }
+  .slm__btn--primary { text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slm__sun--lit, .slm__dot--connecting, .slm__dot--requesting, .slm__dot--calibrating, .slm__dot--reconnecting { animation: none; }
+}
+
+</style>
+  <style>
+    :root { color-scheme: light; }
+    html { background: #fffbf5; }
+    body { margin: 0; background: #fffbf5; color: #44403c; -webkit-font-smoothing: antialiased; }
+    .page-head { max-width: 1080px; margin: 0 auto; padding: 34px 20px 26px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+    .brand { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.02em; font-size: 18px; color: #292524; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+    .brand i { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 40% 38%, #fff3b0, #f7d94c 55%, #e86b3a); box-shadow: 0 4px 14px rgba(232, 107, 58, 0.35); }
+    .brand span { color: #78716c; font-weight: 400; }
+    .page-head a.gh { font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; color: #78716c; text-decoration: none; }
+    .page-head a.gh:hover { color: #c2582d; }
+    .intro { max-width: 1080px; margin: 0 auto; padding: 0 20px 28px; }
+    .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(38px, 6vw, 60px); color: #292524; margin: 0; max-width: 16ch; }
+    .intro h1 em { font-style: normal; background: linear-gradient(90deg, #f7d94c, #e86b3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 16px 0 0; }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <a class="brand" href="https://sundaylight.cc"><i></i>Sunday <span>Light Meter</span></a>
+    <a class="gh" href="https://github.com/natmart-in/sunday-light-meter">Open source on GitHub</a>
+  </header>
+  <section class="intro">
+    <h1>Measure the light <em>you actually get.</em></h1>
+    <p>Connect an Opple Light Master 3 or 4 over Bluetooth to read brightness, colour temperature, Duv and colour rendering live - then check how close your Sunday light lands to the setting in the app.</p>
+  </section>
+
+  <div id="sunday-light-meter"></div>
+
+  <script type="module">
+// ---- src/cie-data.js ----
+// CIE reference data, 380-780 nm at 5 nm (81 samples). Generated from the
+// tables used by open-light-master / the Sunday CCT bench port - do not hand-edit.
+const N_WL = 81;
+const WL_START = 380;
+const WL_STEP = 5;
+// CIE 1931 2-degree colour matching functions, interleaved [x, y, z] per wavelength.
+const CMF_1931_2DEG = [
+  0.0014, 0.0, 0.0065, 0.0022, 0.0001, 0.0105, 0.0042, 0.0001, 0.0201, 0.0076, 0.0002, 0.0362,
+  0.0143, 0.0004, 0.0679, 0.0232, 0.0006, 0.1102, 0.0435, 0.0012, 0.2074, 0.0776, 0.0022, 0.3713,
+  0.1344, 0.004, 0.6456, 0.2148, 0.0073, 1.0391, 0.2839, 0.0116, 1.3856, 0.3285, 0.0168, 1.623,
+  0.3483, 0.023, 1.7471, 0.3481, 0.0298, 1.7825, 0.3362, 0.038, 1.7721, 0.3187, 0.048, 1.7441,
+  0.2908, 0.06, 1.6692, 0.2511, 0.0739, 1.5281, 0.1954, 0.091, 1.2876, 0.1421, 0.1126, 1.0419,
+  0.0956, 0.139, 0.813, 0.058, 0.1693, 0.6162, 0.032, 0.208, 0.4652, 0.0147, 0.2586, 0.3533,
+  0.0049, 0.323, 0.272, 0.0024, 0.4073, 0.2123, 0.0093, 0.503, 0.1582, 0.0291, 0.6082, 0.1117,
+  0.0633, 0.71, 0.0782, 0.1096, 0.7932, 0.0573, 0.1655, 0.862, 0.0422, 0.2257, 0.9149, 0.0298,
+  0.2904, 0.954, 0.0203, 0.3597, 0.9803, 0.0134, 0.4333, 0.995, 0.0087, 0.5121, 1.0, 0.0057,
+  0.5945, 0.995, 0.0039, 0.6784, 0.9786, 0.0027, 0.7621, 0.952, 0.0021, 0.8425, 0.9154, 0.0018,
+  0.9163, 0.87, 0.0017, 0.9786, 0.8163, 0.0014, 1.0263, 0.757, 0.0011, 1.0567, 0.6949, 0.001,
+  1.0622, 0.631, 0.0008, 1.0456, 0.5668, 0.0006, 1.0026, 0.503, 0.0003, 0.9384, 0.4412, 0.0002,
+  0.8544, 0.381, 0.0002, 0.7514, 0.321, 0.0, 0.6424, 0.265, 0.0, 0.5419, 0.217, 0.0,
+  0.4479, 0.175, 0.0, 0.3608, 0.1382, 0.0, 0.2835, 0.107, 0.0, 0.2187, 0.0816, 0.0,
+  0.1649, 0.061, 0.0, 0.1212, 0.0446, 0.0, 0.0874, 0.032, 0.0, 0.0636, 0.0232, 0.0,
+  0.0468, 0.017, 0.0, 0.0329, 0.0119, 0.0, 0.0227, 0.0082, 0.0, 0.0158, 0.0057, 0.0,
+  0.0114, 0.0041, 0.0, 0.0081, 0.0029, 0.0, 0.0058, 0.0021, 0.0, 0.0041, 0.0015, 0.0,
+  0.0029, 0.001, 0.0, 0.002, 0.0007, 0.0, 0.0014, 0.0005, 0.0, 0.001, 0.0003, 0.0,
+  0.0007, 0.00025, 0.0, 0.0005, 0.0002, 0.0, 0.0003, 0.0001, 0.0, 0.0003, 0.0001, 0.0,
+  0.0002, 0.0001, 0.0, 0.0002, 0.0001, 0.0, 0.0001, 0.0001, 0.0, 0.0001, 0.0, 0.0,
+  0.0, 0.0, 0.0,
+];
+// CIE D-illuminant components, interleaved [S0, S1, S2] per wavelength.
+const CIE_D_S = [
+  63.4, 38.5, 3.0, 64.6, 36.75, 2.1, 65.8, 35.0, 1.2, 80.3, 39.2, 0.05,
+  94.8, 43.4, -1.1, 99.8, 44.85, -0.8, 104.8, 46.3, -0.5, 105.35, 45.1, -0.6,
+  105.9, 43.9, -0.7, 101.35, 40.5, -0.95, 96.8, 37.1, -1.2, 105.35, 36.9, -1.9,
+  113.9, 36.7, -2.6, 119.75, 36.3, -2.75, 125.6, 35.9, -2.9, 125.55, 34.25, -2.85,
+  125.5, 32.6, -2.8, 123.4, 30.25, -2.7, 121.3, 27.9, -2.6, 121.3, 26.1, -2.6,
+  121.3, 24.3, -2.6, 117.4, 22.2, -2.2, 113.5, 20.1, -1.8, 113.3, 18.15, -1.65,
+  113.1, 16.2, -1.5, 111.95, 14.7, -1.4, 110.8, 13.2, -1.3, 108.65, 10.9, -1.25,
+  106.5, 8.6, -1.2, 107.65, 7.35, -1.1, 108.8, 6.1, -1.0, 107.05, 5.15, -0.75,
+  105.3, 4.2, -0.5, 104.85, 3.05, -0.4, 104.4, 1.9, -0.3, 102.2, 0.95, -0.15,
+  100.0, 0.0, 0.0, 98.0, -0.8, 0.1, 96.0, -1.6, 0.2, 95.55, -2.55, 0.35,
+  95.1, -3.5, 0.5, 92.1, -3.5, 1.3, 89.1, -3.5, 2.1, 89.8, -4.65, 2.65,
+  90.5, -5.8, 3.2, 90.4, -6.5, 3.65, 90.3, -7.2, 4.1, 89.35, -7.9, 4.4,
+  88.4, -8.6, 4.7, 86.2, -9.05, 4.9, 84.0, -9.5, 5.1, 84.55, -10.2, 5.9,
+  85.1, -10.9, 6.7, 83.5, -10.8, 7.0, 81.9, -10.7, 7.3, 82.25, -11.35, 7.95,
+  82.6, -12.0, 8.6, 83.75, -13.0, 9.2, 84.9, -14.0, 9.8, 83.1, -13.8, 10.0,
+  81.3, -13.6, 10.2, 76.6, -12.8, 9.25, 71.9, -12.0, 8.3, 73.1, -12.65, 8.95,
+  74.3, -13.3, 9.6, 75.35, -13.1, 9.05, 76.4, -12.9, 8.5, 69.85, -11.75, 7.75,
+  63.3, -10.6, 7.0, 67.5, -11.1, 7.3, 71.7, -11.6, 7.6, 74.35, -11.9, 7.8,
+  77.0, -12.2, 8.0, 71.1, -11.2, 7.35, 65.2, -10.2, 6.7, 56.45, -9.0, 5.95,
+  47.7, -7.8, 5.2, 58.15, -9.5, 6.3, 68.6, -11.2, 7.4, 66.8, -10.8, 7.1,
+  65.0, -10.4, 6.8,
+];
+// CIE 13.3 test colour samples TCS01..TCS14 (spectral reflectance).
+const TCS = [
+  [
+    0.219, 0.239, 0.252, 0.256, 0.256, 0.254, 0.252, 0.248, 0.244, 0.24, 0.237, 0.232,
+    0.23, 0.226, 0.225, 0.222, 0.22, 0.218, 0.216, 0.214, 0.214, 0.214, 0.216, 0.218,
+    0.223, 0.225, 0.226, 0.226, 0.225, 0.225, 0.227, 0.23, 0.236, 0.245, 0.253, 0.262,
+    0.272, 0.283, 0.298, 0.318, 0.341, 0.367, 0.39, 0.409, 0.424, 0.435, 0.442, 0.448,
+    0.45, 0.451, 0.451, 0.451, 0.451, 0.451, 0.45, 0.45, 0.451, 0.451, 0.453, 0.454,
+    0.455, 0.457, 0.458, 0.46, 0.462, 0.463, 0.464, 0.465, 0.466, 0.466, 0.466, 0.466,
+    0.467, 0.467, 0.467, 0.467, 0.467, 0.467, 0.467, 0.467, 0.467,
+  ],
+  [
+    0.07, 0.079, 0.089, 0.101, 0.111, 0.116, 0.118, 0.12, 0.121, 0.122, 0.122, 0.122,
+    0.123, 0.124, 0.127, 0.128, 0.131, 0.134, 0.138, 0.143, 0.15, 0.159, 0.174, 0.19,
+    0.207, 0.225, 0.242, 0.253, 0.26, 0.264, 0.267, 0.269, 0.272, 0.276, 0.282, 0.289,
+    0.299, 0.309, 0.322, 0.329, 0.335, 0.339, 0.341, 0.341, 0.342, 0.342, 0.342, 0.341,
+    0.341, 0.339, 0.339, 0.338, 0.338, 0.337, 0.336, 0.335, 0.334, 0.332, 0.332, 0.331,
+    0.331, 0.33, 0.329, 0.328, 0.328, 0.327, 0.326, 0.325, 0.324, 0.324, 0.324, 0.323,
+    0.322, 0.321, 0.32, 0.318, 0.316, 0.315, 0.315, 0.314, 0.314,
+  ],
+  [
+    0.065, 0.068, 0.07, 0.072, 0.073, 0.073, 0.074, 0.074, 0.074, 0.073, 0.073, 0.073,
+    0.073, 0.073, 0.074, 0.075, 0.077, 0.08, 0.085, 0.094, 0.109, 0.126, 0.148, 0.172,
+    0.198, 0.221, 0.241, 0.26, 0.278, 0.302, 0.339, 0.37, 0.392, 0.399, 0.4, 0.393,
+    0.38, 0.365, 0.349, 0.332, 0.315, 0.299, 0.285, 0.272, 0.264, 0.257, 0.252, 0.247,
+    0.241, 0.235, 0.229, 0.224, 0.22, 0.217, 0.216, 0.216, 0.219, 0.224, 0.23, 0.238,
+    0.251, 0.269, 0.288, 0.312, 0.34, 0.366, 0.39, 0.412, 0.431, 0.447, 0.46, 0.472,
+    0.481, 0.488, 0.493, 0.497, 0.5, 0.502, 0.505, 0.51, 0.516,
+  ],
+  [
+    0.074, 0.083, 0.093, 0.105, 0.116, 0.121, 0.124, 0.126, 0.128, 0.131, 0.135, 0.139,
+    0.144, 0.151, 0.161, 0.172, 0.186, 0.205, 0.229, 0.254, 0.281, 0.308, 0.332, 0.352,
+    0.37, 0.383, 0.39, 0.394, 0.395, 0.392, 0.385, 0.377, 0.367, 0.354, 0.341, 0.327,
+    0.312, 0.296, 0.28, 0.263, 0.247, 0.229, 0.214, 0.198, 0.185, 0.175, 0.169, 0.164,
+    0.16, 0.156, 0.154, 0.152, 0.151, 0.149, 0.148, 0.148, 0.148, 0.149, 0.151, 0.154,
+    0.158, 0.162, 0.165, 0.168, 0.17, 0.171, 0.17, 0.168, 0.166, 0.164, 0.164, 0.165,
+    0.168, 0.172, 0.177, 0.181, 0.185, 0.189, 0.192, 0.194, 0.197,
+  ],
+  [
+    0.295, 0.306, 0.31, 0.312, 0.313, 0.315, 0.319, 0.322, 0.326, 0.33, 0.334, 0.339,
+    0.346, 0.352, 0.36, 0.369, 0.381, 0.394, 0.403, 0.41, 0.415, 0.418, 0.419, 0.417,
+    0.413, 0.409, 0.403, 0.396, 0.389, 0.381, 0.372, 0.363, 0.353, 0.342, 0.331, 0.32,
+    0.308, 0.296, 0.284, 0.271, 0.26, 0.247, 0.232, 0.22, 0.21, 0.2, 0.194, 0.189,
+    0.185, 0.183, 0.18, 0.177, 0.176, 0.175, 0.175, 0.175, 0.175, 0.177, 0.18, 0.183,
+    0.186, 0.189, 0.192, 0.195, 0.199, 0.2, 0.199, 0.198, 0.196, 0.195, 0.195, 0.196,
+    0.197, 0.2, 0.203, 0.205, 0.208, 0.212, 0.215, 0.217, 0.219,
+  ],
+  [
+    0.151, 0.203, 0.265, 0.339, 0.41, 0.464, 0.492, 0.508, 0.517, 0.524, 0.531, 0.538,
+    0.544, 0.551, 0.556, 0.556, 0.554, 0.549, 0.541, 0.531, 0.519, 0.504, 0.488, 0.469,
+    0.45, 0.431, 0.414, 0.395, 0.377, 0.358, 0.341, 0.325, 0.309, 0.293, 0.279, 0.265,
+    0.253, 0.241, 0.234, 0.227, 0.225, 0.222, 0.221, 0.22, 0.22, 0.22, 0.22, 0.22,
+    0.223, 0.227, 0.233, 0.239, 0.244, 0.251, 0.258, 0.263, 0.268, 0.273, 0.278, 0.281,
+    0.283, 0.286, 0.291, 0.296, 0.302, 0.313, 0.325, 0.338, 0.351, 0.364, 0.376, 0.389,
+    0.401, 0.413, 0.425, 0.436, 0.447, 0.458, 0.469, 0.477, 0.485,
+  ],
+  [
+    0.378, 0.459, 0.524, 0.546, 0.551, 0.555, 0.559, 0.56, 0.561, 0.558, 0.556, 0.551,
+    0.544, 0.535, 0.522, 0.506, 0.488, 0.469, 0.448, 0.429, 0.408, 0.385, 0.363, 0.341,
+    0.324, 0.311, 0.301, 0.291, 0.283, 0.273, 0.265, 0.26, 0.257, 0.257, 0.259, 0.26,
+    0.26, 0.258, 0.256, 0.254, 0.254, 0.259, 0.27, 0.284, 0.302, 0.324, 0.344, 0.362,
+    0.377, 0.389, 0.4, 0.41, 0.42, 0.429, 0.438, 0.445, 0.452, 0.457, 0.462, 0.466,
+    0.468, 0.47, 0.473, 0.477, 0.483, 0.489, 0.496, 0.503, 0.511, 0.518, 0.525, 0.532,
+    0.539, 0.546, 0.553, 0.559, 0.565, 0.57, 0.575, 0.578, 0.581,
+  ],
+  [
+    0.104, 0.129, 0.17, 0.24, 0.319, 0.416, 0.462, 0.482, 0.49, 0.488, 0.482, 0.473,
+    0.462, 0.45, 0.439, 0.426, 0.413, 0.397, 0.382, 0.366, 0.352, 0.337, 0.325, 0.31,
+    0.299, 0.289, 0.283, 0.276, 0.27, 0.262, 0.256, 0.251, 0.25, 0.251, 0.254, 0.258,
+    0.264, 0.269, 0.272, 0.274, 0.278, 0.284, 0.295, 0.316, 0.348, 0.384, 0.434, 0.482,
+    0.528, 0.568, 0.604, 0.629, 0.648, 0.663, 0.676, 0.685, 0.693, 0.7, 0.705, 0.709,
+    0.712, 0.715, 0.717, 0.719, 0.721, 0.72, 0.719, 0.722, 0.725, 0.727, 0.729, 0.73,
+    0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73,
+  ],
+  [
+    0.066, 0.062, 0.058, 0.055, 0.052, 0.052, 0.051, 0.05, 0.05, 0.049, 0.048, 0.047,
+    0.046, 0.044, 0.042, 0.041, 0.038, 0.035, 0.033, 0.031, 0.03, 0.029, 0.028, 0.028,
+    0.028, 0.029, 0.03, 0.03, 0.031, 0.031, 0.032, 0.032, 0.033, 0.034, 0.035, 0.037,
+    0.041, 0.044, 0.048, 0.052, 0.06, 0.076, 0.102, 0.136, 0.19, 0.256, 0.336, 0.418,
+    0.505, 0.581, 0.641, 0.682, 0.717, 0.74, 0.758, 0.77, 0.781, 0.79, 0.797, 0.803,
+    0.809, 0.814, 0.819, 0.824, 0.828, 0.83, 0.831, 0.833, 0.835, 0.836, 0.836, 0.837,
+    0.838, 0.839, 0.839, 0.839, 0.839, 0.839, 0.839, 0.839, 0.839,
+  ],
+  [
+    0.05, 0.054, 0.059, 0.063, 0.066, 0.067, 0.068, 0.069, 0.069, 0.07, 0.072, 0.073,
+    0.076, 0.078, 0.083, 0.088, 0.095, 0.103, 0.113, 0.125, 0.142, 0.162, 0.189, 0.219,
+    0.262, 0.305, 0.365, 0.416, 0.465, 0.509, 0.546, 0.581, 0.61, 0.634, 0.653, 0.666,
+    0.678, 0.687, 0.693, 0.698, 0.701, 0.704, 0.705, 0.705, 0.706, 0.707, 0.707, 0.707,
+    0.708, 0.708, 0.71, 0.711, 0.712, 0.714, 0.716, 0.718, 0.72, 0.722, 0.725, 0.729,
+    0.731, 0.735, 0.739, 0.742, 0.746, 0.748, 0.749, 0.751, 0.753, 0.754, 0.755, 0.755,
+    0.755, 0.755, 0.756, 0.757, 0.758, 0.759, 0.759, 0.759, 0.759,
+  ],
+  [
+    0.111, 0.121, 0.127, 0.129, 0.127, 0.121, 0.116, 0.112, 0.108, 0.105, 0.104, 0.104,
+    0.105, 0.106, 0.11, 0.115, 0.123, 0.134, 0.148, 0.167, 0.192, 0.219, 0.252, 0.291,
+    0.325, 0.347, 0.356, 0.353, 0.346, 0.333, 0.314, 0.294, 0.271, 0.248, 0.227, 0.206,
+    0.188, 0.17, 0.153, 0.138, 0.125, 0.114, 0.106, 0.1, 0.096, 0.092, 0.09, 0.087,
+    0.085, 0.082, 0.08, 0.079, 0.078, 0.078, 0.078, 0.078, 0.081, 0.083, 0.088, 0.093,
+    0.102, 0.112, 0.125, 0.141, 0.161, 0.182, 0.203, 0.223, 0.242, 0.257, 0.27, 0.282,
+    0.292, 0.302, 0.31, 0.314, 0.317, 0.323, 0.33, 0.334, 0.338,
+  ],
+  [
+    0.12, 0.103, 0.09, 0.082, 0.076, 0.068, 0.064, 0.065, 0.075, 0.093, 0.123, 0.16,
+    0.207, 0.256, 0.3, 0.331, 0.346, 0.347, 0.341, 0.328, 0.307, 0.282, 0.257, 0.23,
+    0.204, 0.178, 0.154, 0.129, 0.109, 0.09, 0.075, 0.062, 0.051, 0.041, 0.035, 0.029,
+    0.025, 0.022, 0.019, 0.017, 0.017, 0.017, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016,
+    0.016, 0.016, 0.018, 0.018, 0.018, 0.018, 0.019, 0.02, 0.023, 0.024, 0.026, 0.03,
+    0.035, 0.043, 0.056, 0.074, 0.097, 0.128, 0.166, 0.21, 0.257, 0.305, 0.354, 0.401,
+    0.446, 0.485, 0.52, 0.551, 0.577, 0.599, 0.618, 0.633, 0.645,
+  ],
+  [
+    0.104, 0.127, 0.161, 0.211, 0.264, 0.313, 0.341, 0.352, 0.359, 0.361, 0.364, 0.365,
+    0.367, 0.369, 0.372, 0.374, 0.376, 0.379, 0.384, 0.389, 0.397, 0.405, 0.416, 0.429,
+    0.443, 0.454, 0.461, 0.466, 0.469, 0.471, 0.474, 0.476, 0.483, 0.49, 0.506, 0.526,
+    0.553, 0.582, 0.618, 0.651, 0.68, 0.701, 0.717, 0.729, 0.736, 0.742, 0.745, 0.747,
+    0.748, 0.748, 0.748, 0.748, 0.748, 0.748, 0.748, 0.748, 0.747, 0.747, 0.747, 0.747,
+    0.747, 0.747, 0.747, 0.746, 0.746, 0.746, 0.745, 0.744, 0.743, 0.744, 0.745, 0.748,
+    0.75, 0.75, 0.749, 0.748, 0.748, 0.747, 0.747, 0.747, 0.747,
+  ],
+  [
+    0.036, 0.036, 0.037, 0.038, 0.039, 0.039, 0.04, 0.041, 0.042, 0.042, 0.043, 0.044,
+    0.044, 0.045, 0.045, 0.046, 0.047, 0.048, 0.05, 0.052, 0.055, 0.057, 0.062, 0.067,
+    0.075, 0.083, 0.092, 0.1, 0.108, 0.121, 0.133, 0.142, 0.15, 0.154, 0.155, 0.152,
+    0.147, 0.14, 0.133, 0.125, 0.118, 0.112, 0.106, 0.101, 0.098, 0.095, 0.093, 0.09,
+    0.089, 0.087, 0.086, 0.085, 0.084, 0.084, 0.084, 0.084, 0.085, 0.087, 0.092, 0.096,
+    0.102, 0.11, 0.123, 0.137, 0.152, 0.169, 0.188, 0.207, 0.226, 0.243, 0.26, 0.277,
+    0.294, 0.31, 0.325, 0.339, 0.353, 0.366, 0.379, 0.39, 0.399,
+  ],
+];
+// Wyszecki & Stiles Planckian table used for the DNG-style tint walk: [mired, u, v, slope].
+const TINT_TABLE = [
+  [0, 0.18006, 0.26352, -0.24341],
+  [10, 0.18066, 0.26589, -0.25479],
+  [20, 0.18133, 0.26846, -0.26876],
+  [30, 0.18208, 0.27119, -0.28539],
+  [40, 0.18293, 0.27407, -0.3047],
+  [50, 0.18388, 0.27709, -0.32675],
+  [60, 0.18494, 0.28021, -0.35156],
+  [70, 0.18611, 0.28342, -0.37915],
+  [80, 0.1874, 0.28668, -0.40955],
+  [90, 0.1888, 0.28997, -0.44278],
+  [100, 0.19032, 0.29326, -0.47888],
+  [125, 0.19462, 0.30141, -0.58204],
+  [150, 0.19962, 0.30921, -0.70471],
+  [175, 0.20525, 0.31647, -0.84901],
+  [200, 0.21142, 0.32312, -1.0182],
+  [225, 0.21807, 0.32909, -1.2168],
+  [250, 0.22511, 0.33439, -1.4512],
+  [275, 0.23247, 0.33904, -1.7298],
+  [300, 0.2401, 0.34308, -2.0637],
+  [325, 0.24702, 0.34655, -2.4681],
+  [350, 0.25591, 0.34951, -2.9641],
+  [375, 0.264, 0.352, -3.5814],
+  [400, 0.27218, 0.35407, -4.3633],
+  [425, 0.28039, 0.35577, -5.3762],
+  [450, 0.28863, 0.35714, -6.7262],
+  [475, 0.29685, 0.35823, -8.5955],
+  [500, 0.30505, 0.35907, -11.324],
+  [525, 0.3132, 0.35968, -15.628],
+  [550, 0.32129, 0.36011, -23.325],
+  [575, 0.32931, 0.36038, -40.77],
+  [600, 0.33724, 0.36051, -116.45],
+];
+
+// ---- src/lm4-model-data.js ----
+// Opple Light Master 4 polynomial model coefficients (LightmasterIVCoeff_20231115).
+// Extracted from the official Opple app v3.15.0 by gabrielebaudo/opple-bridge (MIT).
+// Each entry: { bias, coef } where coef has 165 terms matching POWERS in lm4.js
+// (index 0 is the constant term, folded into bias; absent terms are 0).
+const LM4_POLY = {
+  R1: { bias: 37.589138665683386, coef: [0, -10.31657832365916, 25.5914151797081, 20.147378753648077, 17.687248673064687, 6.943582573473107, -2.268357567068776, 2.0668152494608645, 0.07020941073070355, -6.353711023115005, -1.421999037759733, -5.160631136014462, -8.384844863259667, 39.20080132570421, -42.15403047767256, 4.147814463595229, 30.752672872909482, -21.167647476604717, -20.721703032360757, 27.73846603844287, 11.130863485433366, 32.45082339651332, -2.6908486503599445, -14.018477812131136, 6.019956996678739, 10.734810278383023, 16.81634769640743, 4.6459337989494145, -1.9155727973486683, -2.865224539285397, -1.0526203886818226, 14.303064288136627, -5.954429813183631, -4.6476106842483045, 4.811120276411478, 3.3710117165217555, 11.38593934934037, -2.4140681358903935, -3.870891774672342, 10.34502124082626, 9.60318662258214, 1.0641728619532247, -4.678498872471546, -2.3925219664561954, 1.1094314647615584, -5.9256154159623415, 28.281644785881422, 13.740598268580342, -1.2405238135450862, 41.79187396633712, 7.864488408508872, 23.03806501767405, -91.17231239005969, -27.3697037782801, 6.781558353927971, 21.68309196269175, 2.314917921511533, 4.8855260635970685, -50.30126027035819, -5.645593136742464, 19.03791263858172, -35.04664385929671, -2.6493820394244993, 4.108688807594891, 3.7988748226042772, 3.8767618126370755, 10.97183873315057, -18.358611210935198, 24.296890749767183, 52.913483111882144, 6.884590165253346, 8.54997747926183, 20.78529932644782, -28.25036429746117, -25.955109575645704, 14.693973561022133, -17.219488329422756, -8.33739954183398, -0.7891960823729245, 2.546437595486359, -28.402597676043943, -7.430702012588426, -13.76335740684251, 15.007179010765451, 33.7985307923876, 3.417558293091057, 13.02505575037296, 18.941053303629626, -21.43608584914794, -16.296262082975034, 12.212950750534656, -1.2839026151899244, -11.895810988089787, -1.1498204601745199, 8.155987634070584, 0.37356306330771466, 0.3928369771122688, -4.573845893436169, 12.125887359998544, 12.642173787832082, 4.955576740214775, -6.993094516586701, -7.24359714766944, -14.573215499165757, -19.27622166276359, 8.374084082090842, 0.08438016985913178, -8.582177927947075, 11.08871433560599, -10.772921390215531, -9.136431682046405, 18.129479886658306, 16.624836419961873, -20.030389925079533, -15.72487920263621, 8.712915003770213, 9.016358759385598, 12.878992627406618, -12.076957033621888, 1.9063690784045235, 16.94364109880567, 6.53381779841902, 1.2569684033029458, 18.25432632107028, -1.3159713124772021, 2.867011320906294, 8.672890012843677, 5.9178011675203654, 10.4803208394185, 9.99631495805195, 3.569995581271482, -6.684714387554942, -2.0395557011468584, 2.751740243776461, -6.303879427553639, 2.634166052787998, 5.243852359765408, 2.981757780339677, 0.6438143909890632, 9.284804391868384, 6.2368052016803635, 9.29050946443953, -2.8211199663106816, -5.595253046423572, -2.234799517416262, -0.7553331216725641, 7.0852692662939205, 1.9615473057572155, -3.363453989229645, -8.242283026155647, -7.154919219974776, -4.992627995375952, 2.324174806953443, -2.0341794568834803, -6.443596364481732, -4.826746590730319, 5.642909403526256, 4.865560101638595, -1.0459750406534012, -3.919580083540981, -4.456986798301412, 0.07807469582752888, 6.219553106454103, 2.193216966440402, -1.488960239416432] },
+  R2: { bias: 53.56021754159489, coef: [0, -3.9062840533502117, 10.843913527522146, 13.053987822779305, 4.58050212138172, 8.082268629387855, 11.282347320914177, 5.40932298984942, 0.49242757094291095, -1.6401938844619974, -11.644643319541078, 4.389900894495226, -3.0929004526552433, 15.290909326337793, -11.234719687414694, -0.575292218640195, 9.576017486596022, -6.800567952982367, -15.95221691861442, 20.591217953335626, 4.278865511205338, 12.000366793036022, -7.481896880296811, -3.6774960286123135, 11.012309880620952, 8.779929329604608, 18.321536126908565, 7.156736091636036, 2.478860368174037, -9.668153013266144, -2.5560784962308656, 12.571937668477906, -1.9746008182974137, -6.554526764150767, 4.483815582040134, 3.4071828637015247, 0.6948943023778318, -1.9643788582202568, 2.148053537465045, 3.5344892755383097, 6.134781324608975, 1.165858390846318, -0.8936985605854553, -3.2776751564472066, -2.56576295659534, 11.948433901372109, 13.760644905678967, 0.9611140667949912, 14.202645461940142, 6.873479577416525, 0.3865800686932907, 19.83839768148744, -12.57374290731593, -12.538106322789696, -6.357728377875443, -1.5765225281736293, -8.151603937326243, 2.493079459047555, -14.7973416168637, -12.698526940029238, 9.234889358275185, -15.522889727730654, -10.655846163062836, 7.600786609104201, 3.996646339001174, 10.160018903507531, 0.9473750865781674, -7.9380194377411994, 3.942491145659944, 16.58425307978365, 5.37445520615507, 0.8127996326918762, 4.131838194218215, -12.612994605812798, -14.311011507928589, 17.794560823205575, -8.53131574611089, -6.164515704314905, -2.506451290595828, 4.6368123676167645, -12.404947124128766, -2.525181113675113, 1.6080877599681436, 15.474775741939425, 21.559521202151394, 10.221451635752437, 14.932254146391491, 10.093539409101492, -10.87299061815266, -14.036804669797338, 13.53142073377411, -3.630940141777367, -6.6032824475919645, -1.8013565354797016, 3.6776576572206086, -15.999597018252606, -22.202395757188096, 1.3305579700140893, 23.336893209088483, 10.848229728583675, 3.320897873982531, -8.856885079189892, -8.590218503888941, 0.9981992794938506, -14.020696959213764, -2.07995720333238, 9.420623553732236, -8.931287458002611, 1.2372729528867614, 2.1764332225751533, -2.4690892153405337, 10.20829876820453, 8.005119299106685, -12.350921391389013, -12.014982762353442, 4.810260475464301, 2.750378980118193, 1.3307362949053871, -7.283715240045871, 0.3873544551119128, 12.45891903757002, 7.489082660568081, -2.1917798048158814, 10.382892567289083, -1.325905328724346, -4.601015175968895, 5.230589581761163, 5.797943308344393, 0.02502610144832162, 2.2104366886176314, -0.47713683342707125, 1.0520216073222242, -3.6515216710007303, -2.5633108450589726, 2.0838246518738672, -1.1905867414095639, 0.6129831709482094, 5.689529993548562, 6.197571037441643, 4.933895022978623, 4.089085918503374, 1.7064825854405017, -1.533520861987738, -2.214520425829975, 0.24921390354341078, 4.037123632836669, 4.342801253698616, -0.6906067527269782, -3.169621170574248, -10.094728103720117, -2.74654800568386, 2.2008410231165945, -1.0246012305080756, -2.42316077433271, -2.9614392880985134, -3.8765236831110816, -1.9827607825610665, -0.04610234926509911, -0.7113616271859632, -2.987813740354069, -0.4651280642237902, 0.4999409098011451, 3.213920122212479, 0.5080648768957511, -0.1114937411951644] },
+  R3: { bias: 28.01900568733734, coef: [0, 5.5829024300988985, -2.5517658240447783, 23.982766957294665, -0.5053667325628582, 11.954789391869358, 22.197183174341877, 9.929782166269565, 5.301018888816219, 1.9223630180067524, -1.182406136295458, 11.90549710153507, 10.774014158144707, 8.94542978176737, -3.104097241291157, -10.728466967290423, -6.355564928672016, 36.26469977642573, -24.0306494007447, 4.919735884044454, -0.8837914435779882, 15.865943037528027, 0.6123249096724994, 11.401306156107076, 18.974517251118478, 22.283734526863277, -26.77619108884347, 30.0459005835318, 3.7316252527060327, -14.496588305438955, -3.3318843160141554, -13.606279691739404, 18.88812802120591, -7.597021626278809, 8.605389624891572, 27.065734691107316, -13.073912992376943, 2.198069546856019, -0.058417630409443054, 3.4041884537670852, -5.943442284145638, 10.750894213823821, 3.0505371425911614, -3.293693559977319, -3.2603379941562243, 7.241496992817516, -0.49301244238204955, 16.472828555244128, 20.90847175901031, 12.544279065472024, 8.08339438377022, 18.273886004198012, 6.418618120162285, -7.835562479105229, -15.22452273050364, -19.989050551451157, -17.11779794906942, 0.5414500258115567, 6.8826624517566914, 19.74530475563407, 42.86492578073185, -12.271785256622131, -16.88577988856972, 5.527934706762026, -26.220103211768855, 3.404278424376515, -6.477777937383763, 4.624047962881907, 5.7164012326017035, 0.2588819505839698, 1.7509717166886138, 0.9674242841584534, -8.453656148537947, 14.726855717938738, -1.766745330687036, 2.8341148627515644, 1.7334505266035969, 19.208710155308253, 6.1402477634422, 2.8161264158212655, 26.597790817277634, 8.012276897009356, 18.55608871122886, -13.419931128183181, -30.447234255655935, -44.165502834764695, 19.865675746055462, 22.077683412547515, 25.23429081724556, 15.54323084142474, 6.6005635570878045, 12.645769677893465, -4.133867801441887, 2.2570483464023425, -2.598464552246123, -20.657559020184102, -5.410160646081233, -20.145919858023017, 3.5044273807473103, -12.380031812814815, 1.6386744961702149, -6.384719010125434, -14.99228650740632, -1.0379104140705493, 5.345415937329904, 7.22720464278712, 14.77046058540415, -7.7904903602303675, -27.013498481486042, -12.700447648030577, -3.99338369520196, -5.002518428615871, -20.616543406358293, -1.1190093008576467, 6.316746008421253, 12.741308649955819, 21.037315240963274, 22.53531963180755, 17.974275566171926, -2.4619237479844496, 4.524361766592993, 20.44933970172352, 3.26192827868659, -19.132363657477153, -7.014779393200933, -0.9441738645633735, 9.124755525432128, -3.1501122431745094, -3.6653944981477826, 1.1354295346341368, 5.248282668499953, 8.178264712829288, 7.456482845443586, 4.113229299699612, -4.937846956868832, -13.677358086125913, -17.71493797012042, -10.438918688155148, -2.6670674885532657, -2.439107576019186, -6.2204680038485085, 0.9171972636622934, 8.021486099685317, 11.304908984664582, 9.173269454389736, 10.018870466923081, -5.814547310883954, -1.2104017586368672, 1.8886839802509212, -4.660328392003299, -5.418130277402892, -7.349306546447992, 0.5017432394121225, 5.902137594079541, 7.626758234168921, -3.6056899713285606, -2.6741057769108734, -7.178950068300525, -4.77692883358822, 5.269791813780343, 5.413452195311692, 0.8622615298207696, -10.704249374294513, 0.05129792559142277, 0.6761108120983402] },
+  R4: { bias: 6.699849573317721, coef: [0, -4.528812300329412, 24.90308158152542, 24.220310829075437, 16.124966830368656, 11.38995920770861, 9.529124265649877, 9.41496337616304, 3.1786721239574973, -5.7712108114066965, 9.013307993487826, 2.440959165152348, -4.35760160935582, 37.16716667556251, -45.45511740144071, 6.116047363271519, 31.116337753211337, -8.37430569473312, -27.45336721611007, 26.78212214938058, 9.826727659939015, 65.1908549743613, 4.054434904691546, -21.262581555898084, 2.5052469963597335, 22.53417331969124, -12.847111544036926, 0.6484245302177336, 9.385678081575518, -6.481740422421499, 0.17362367198141623, 2.268067115142395, 0.05114496338786269, 7.639364794466207, -1.7421693851684967, 19.482508907881442, 12.109899506441204, -1.6197606860995297, -14.061915063862353, 13.148608775467453, 16.898802678062385, 5.785162613441708, 1.0557211180056643, -11.428814882708844, -0.06686344662657488, -4.753138216940292, 19.64692996926911, 21.795246618620084, 10.121038943205033, 41.4093005052954, 18.65537715480557, 25.733908033377542, -102.26473554604759, -34.214694193472, 10.815343394493945, 19.1708721074826, 7.827579361085793, 7.368792901722781, -46.027963015801795, 0.21918166081018636, 32.992822366990325, -28.72277279806027, -0.12796936995593472, 4.95184722163063, -19.523879698211655, -6.246253387425874, 12.042689836739726, -16.75930345589446, 51.64343286814618, 73.43043543651079, 24.550481225317178, 15.528951006852694, 21.39867718659558, -23.958185304672064, -27.114057861380157, -6.0014086529640895, -36.466707576825506, 7.633629874507749, 15.967579470322764, 4.304137600672117, -9.480207167806958, -4.106154653667549, -1.184395849126291, -23.1487278066146, 7.223815277665801, -17.69949719460928, -11.949123922403482, 4.731234958891599, -21.887993846284882, 7.392302047632451, 12.745578747422325, 7.583887338552114, -17.600392726185365, 7.629557977192162, 18.880020122282126, 13.447340415094548, 17.196180996464836, -25.334812143532744, -0.8593278751601586, 13.62150344890422, -15.73041657706907, -7.504684580062305, -4.447767876943051, -20.53487127521104, -6.482215104632205, 4.394354001094135, -15.179711422341873, -7.033349838118168, 2.683471854135898, -9.456086273214817, 15.478729721721034, 8.706363599579017, 3.3118911901419743, -8.412500355232389, 1.34098112228511, 3.2509970457527015, 28.583296031330256, 32.62086606813804, -9.943421642736418, -3.5245337816373508, 16.679030904195812, 10.194079962979998, 2.63518318936622, 12.255144287559556, -4.031827117156643, -3.0617736528136423, -2.3721584740678585, 9.934071596996196, 21.775112334805648, 11.95795486123866, 7.425855628719603, -10.80524448877452, 5.886035328619339, 1.6663101354156917, -17.42372070792727, -1.5044246122792932, -3.214826554876907, 0.6089167056691958, 12.034323793349653, 0.8227151265528669, -3.7995609699015995, 20.94887887340002, 10.469889676084366, -3.4370654827377924, 2.966830740901283, 2.5827589434612057, -2.9858049417949877, -5.340405503052608, 1.22168580589059, 3.564145239716195, -17.233826889035466, -15.349241354254866, 5.148468960138749, 1.2975110091806632, -11.284980573716478, 2.1913810024952984, 2.0904053555163347, 4.392097186318017, -2.966183054005734, 4.155296677162382, -0.4897620945865748, -3.7575310286131125, 5.352364395118859, -8.085419522123962, 2.8518032150161696] },
+  R5: { bias: 25.520134045820278, coef: [0, -10.239793601625118, 18.669079477576737, 23.156763729427315, 19.510404426862554, 18.518961896781995, 5.118931983294637, 6.26108381429865, 3.387452810268418, -4.994371069426489, -10.48281271533683, 1.3067209184686979, -3.413840754754999, 35.45579623051267, -41.995615175916456, 1.9547225870494445, 25.250028896877573, -18.445987641585607, -24.36771451991454, 29.230040809956012, 10.530286708399052, 41.95295030302516, -1.9158196493784005, -15.772090723911724, 8.898185139741651, 11.637418555073697, 19.757914455967544, 1.3238777154552388, -0.04817437534353602, -7.613274161517502, 4.457621028363051, 16.40531114249139, -7.012454530741514, -8.157999165488018, 7.423520135359776, 3.4764921558825566, 9.394641284402336, -3.489474606864343, -1.6749639553391853, 7.328744195476089, 8.151086750581177, 6.047640672254649, -1.3854689566379046, -1.0526457052051679, -0.7774066783529509, 4.2900025866394795, 29.085866860017212, 10.253370746165574, 9.10859490452084, 32.828765554699565, 4.851021180078341, 32.73724358481219, -75.11705088002985, -33.002731793021155, 4.594154899713386, 14.762745647409655, -3.9354322387266576, 11.926601791361456, -41.80069892786528, -14.503296527240417, 25.66345879659016, -36.84062661494951, -17.352085334333, 6.400301482839139, 6.4983715013120875, 9.768431807057489, 9.01940993896471, -11.768644146694532, 29.497959322213067, 53.92320509153213, 13.15929977681169, 2.4112170081323594, 11.97032051110535, -30.42323306199122, -23.955693420584975, 6.910270663332739, -28.072593257579026, -9.786055055679878, 3.670997308409216, 2.705693138241889, -24.55661138789999, -6.618727549195447, -4.747458054715657, 14.807998657012162, 28.27478110404828, 6.003286517430625, 6.700476783364358, 6.288434684189222, -22.671305002248104, -12.307979762440473, 12.232966656411008, -5.4494104256879945, -13.961194233579118, 0.0491247760942415, 9.92247503572638, -1.445527204645545, -5.967226023469164, -7.602101609075939, 11.43482474989466, 13.621737839370901, 3.710511894045489, -3.9734462313460024, -9.545247809217287, -6.339823984418077, -19.158855638063155, -2.0430296142913167, 0.6605046337116566, -13.933909470010972, 0.6863095534391576, -6.6361711184861925, -1.2200723684254795, 16.89683683422183, 14.108325905470862, -17.69006433036698, -12.515871092143847, 8.968870381733806, 14.48406045914602, 12.085386149042781, -7.033020260671172, 3.9010104660821288, 18.24065038492399, -0.6029603518679763, 5.969293196016976, 18.336170238913624, 0.5856011777127447, 0.8550782259635643, 10.601898114869808, 4.59910245892601, 8.223429980763452, 5.614337046197591, 0.265553159027061, -4.562608589585108, -3.5560955569197588, 0.2015468700066908, -1.4023111458942952, 1.0455756169961086, 4.341032416915168, 5.836211704417572, 2.244578370743016, 9.405407055749533, 8.875920444431081, 9.661910613985459, -3.026369490671266, -3.7524273556025585, 0.7075846098102161, 4.029812446851769, 5.085726100943304, -2.392251621755086, -1.0137435055603379, -6.940618778252938, -4.25812062182119, -1.0956703896698914, -4.170508366013549, -9.198194366875194, -6.313347571456266, -3.4296923878854133, 6.791334318439177, 0.24259911809652107, -3.2921580501126093, -5.747851401201999, -5.1586716653385665, -1.8887369047719436, 3.173537745365801, 5.521835700117294, 0.7287420228667512] },
+  R6: { bias: 17.32312315565921, coef: [0, -3.0873856721562736, 9.206931790921038, 15.173767998943207, 17.623777777024035, 25.1754207603075, 14.812533728883931, 6.886563463204682, 3.176679747943764, -1.9926644685316977, -13.350497191210545, 9.238861121146725, 0.8512703606528615, 18.127516735775785, -15.36103586456257, -9.379152759608063, 17.749942036782674, -11.768524282521923, -26.312946230925636, 31.585111380249845, 7.134718911341175, 28.68016122339239, 5.944875433556769, -10.530543239701792, 17.17375132347456, 8.076302962099177, 24.516753030019345, 11.5799945768684, 2.6355456236577246, -12.221475821051808, -0.9591707383195578, 16.421534469487334, -0.5299115644481243, -16.653209462113818, 11.865935561625001, 2.9407663342213213, -0.09199642747178602, -5.608937611945828, 11.413916809948295, 2.056081526430294, 1.110738368308296, 7.760091551420763, 0.8288922215151295, -2.4530760933633937, -3.2187582404243953, 19.498875451428898, 19.98887998495658, 9.381530900775523, 25.504048291144557, 7.656112669007452, 8.17189368815204, 32.11952724032392, -10.84051070162758, -16.919427578230973, -0.5449809051101743, -8.790192614351113, -14.766178497129857, 17.38299231484944, -28.4019231513932, -20.778385315411146, 12.869362722227535, -39.81886185247446, -31.445567782594694, 1.4186929483475625, 12.603632687918857, 14.816699452392017, 2.0168881719836538, -8.619861430540508, 14.923054173830357, 28.523094537492298, 13.042215129526918, 1.3692742256513297, 8.663905431030004, -17.189445753028547, -12.189545251468735, 14.50085003287391, -22.46024522073306, -9.672929065251784, 5.614384072331109, -2.956371061577517, -15.529358188081835, -8.16397607263786, -3.493808241787002, 23.904943098652325, 26.09652213689255, 17.689263865436768, 23.71342999763072, 16.424997792837445, -10.380822975555297, -17.380739072305897, 14.843267582032645, -8.7003418631317, -11.22701652626444, 2.8320543072131086, 8.633149679369838, -13.42759904861282, -25.497323052203747, -10.758619167207803, 17.30489860702369, 16.13640193545522, 13.308549739282642, -11.476363723451579, -16.131931952051914, 3.7241743784224433, -20.213909930942975, -4.8662373746883905, 15.790530677953297, -17.219915196946694, -7.32088872486461, -2.6066933711455627, -4.762829893370372, 15.527491788759452, 10.230530321666647, -12.341988946518468, -9.275520887950549, 12.182969075637612, 12.698049380900235, 6.2006417708838715, -6.026086495781531, -2.5436629140356777, 16.977145242606152, -2.795207464099409, 1.738073227743551, 8.883780334929122, 0.9603772959487081, 0.5104361158287277, 14.578192945165634, 3.7480519624298836, 1.2689691215706214, -3.157747240454015, -4.3185103360029, 10.925738874407799, -8.83421069308059, -0.730254350377377, 3.2865879053867424, -3.824572997624371, 1.4323200129193145, 2.1681606406645195, -1.6569280761935268, 10.483170904981833, 12.704508969099479, 4.726140881166176, -3.894022341503342, -3.020890906891845, 5.390801678517975, 8.978799675338104, 6.434510564939437, -2.32784062714706, -2.673704863332864, -10.853679275613334, -0.3237567752479652, 4.247423222527037, -4.843611290819274, -7.274922013036733, -1.4998436663845438, -4.500010424658484, -2.0138192194619586, -10.575756857474534, -4.9886152100007966, -3.5552132243090138, 4.331779160464344, 3.309665077820374, 0.03736499666382419, 8.893136353831, -1.8419306452208246] },
+  R7: { bias: 58.30791282539563, coef: [0, -3.092199798181982, 17.462372416848044, 17.66244243257244, -0.9747393521915455, -7.730326865884442, 7.342447139131493, 0.40179088094238125, 3.8337132196419756, -2.5733907439468577, 1.2170268514171512, 5.6090991103356735, 6.119196057419251, 24.356810398848225, -37.03156488929374, 2.536597863870607, 17.639095321488963, 14.2222153860756, -12.672631900373169, 16.116164762182592, -2.2377654279855093, 21.16953241970619, -8.55526309122173, 1.8071434505931234, 2.490941090856531, 8.254983833414725, -25.29278463890713, 17.17610142972643, 11.307123294412131, -11.30944380866334, -6.284243042369707, -3.2366649806625616, 2.5103047912387852, -0.5829008680671397, -6.787623750437621, 25.262345559810125, 1.4759607048431234, 1.0080129102936064, -14.696137128418382, 8.227544785891318, 3.9622782667876137, -0.2686431288953785, 5.587128718416848, -10.45196408436572, 1.9373037055205058, -9.210285372196028, 17.115889863082835, 2.2251009223471807, 5.205134273962303, 32.60992492924756, -6.545443669857156, 7.628399780714955, -64.90036490740135, -29.383003955967702, 8.6604444686243, -5.525575951300662, -0.6116203725211372, 3.180228156006859, 4.6045326346689714, 17.514960932167117, 19.273667966314818, 2.5196756069599346, 12.514988044358955, 10.523532287268752, -22.840913141440044, 4.56761083657063, 13.012192827772443, -11.073976280129846, 26.49321006341244, 28.69690472299501, -14.299461610668939, -1.3596357875777056, 6.417966694108112, 0.849152487973239, -13.323831533172179, 7.210871773346287, -10.166495370464423, 17.593269438098524, 3.8197612880403695, 17.192431497042463, -3.13913164730284, -0.937324172861369, -2.204272482360289, -15.62899812293179, -8.355722326823555, -29.305444874332853, -0.5196506236163846, 13.054580194687125, 7.151107450678932, 23.102398426779658, 15.253913683888436, 11.604528330419079, -7.878423301151566, 5.643010840820089, 12.599668933092229, 3.2868099998980504, 1.0737217346959702, -28.462476034229773, -5.30864269846356, -4.439596536809804, -12.40485091945759, -17.089680758151673, -1.5189692560230383, -8.316141039716394, 9.854691528028694, 8.874507711412795, -15.703658825123146, -12.345233330886133, -6.493999119299338, 1.115804616634313, 18.682965209860047, -2.7915212664855846, -3.3608171047036355, 0.7773972297788818, -2.2331502662269065, -2.9982190340067394, 26.052318078267145, 28.709054752268198, -1.1526189209983098, -3.2850419840934455, 5.178684165830233, 13.58347905976923, 0.36907881452447955, 3.843001773084344, -2.129407925659607, -5.577607476768708, -9.652168709878133, 7.192138068668448, 7.288333797508261, 12.24258818375407, 8.440141193836654, -8.417004380543714, 8.3803294994365, -0.08768657272018011, -10.364355688489134, -10.648853076198726, -12.291512101414838, 3.758606636079409, 11.451803926733424, -5.583472474623185, -12.559787120629387, 6.630552927591322, 4.056418245924703, 0.8874740943708243, 3.9133975953544753, 2.8748897769142894, -2.2076899770582576, -0.21873617174185692, 3.407869359108503, 1.3019115104233308, -15.859204438100502, -16.850358709319796, -0.7692604825834014, -3.1206360551648347, -7.066429191974627, 4.618064791996073, 5.547822197868199, 4.166423521962235, -5.657390810527749, 0.268269574728372, -4.362787824812145, -3.1708803952275133, 4.65951591588176, -1.1631923233808585, 2.5685570230854093] },
+  R8: { bias: 42.39263911897659, coef: [0, -9.235470241891637, 27.077761058744688, 31.520087432594824, 17.223704908730273, -15.509374667355086, -1.3887040975884855, -0.6407900666053885, 3.436314889189367, -7.9837084230663224, 4.643236442559691, 0.9108126316559768, 2.8211935831160675, 51.37417500846364, -96.61608457441903, 7.374513518855378, 44.064405277119455, -21.985976644444907, -15.166683935179663, 31.935561243383592, -2.081507381346728, 42.55911947971634, -11.282887794171536, -12.011469218866072, -5.1568066489922995, 21.32877445509708, -3.0575687210821902, 1.8106170929200578, -0.2373062730273292, -0.9884958418005393, 8.724693497915965, -4.666768288227404, 3.60201949524551, -2.8809802136658815, -2.7212075929748982, 14.302896418686103, 12.396580170102887, -5.433381938248408, -15.41218102187185, 19.755699730243652, 7.884642143114061, 3.438852948660579, 0.7733647384806766, -15.852677599226384, 6.7793575727626285, -31.51044397240414, 36.6600225444858, 7.7158404338321995, -3.7301258569420335, 79.65141665404947, -6.8753080831030235, 20.263776988316547, -181.69793701530546, -80.5042086607719, 54.74168782989654, 17.7127257435384, 3.782604692649156, 22.339323136930137, -44.83551616851965, 7.179245907280707, 28.545824473146105, -12.971074853331126, 14.138701847107642, 4.082419951836198, -8.56870884063134, -2.0597558420949613, 27.74257684703895, -23.504154171044906, 59.930097541744196, 69.23133055702147, -38.22153053912903, 8.272525562191953, 20.823215714849376, -33.40532945137166, -31.692318501626584, 11.7336507971165, -21.623452486631958, 18.03501351824848, -3.6820966729087745, 14.090257168061536, -37.51589755545917, -2.7148867914587633, 1.8551005992483205, 9.87253848727313, 29.453734455409727, -29.338986032710626, -1.1588470850838113, 17.616718266562774, -18.386623998727888, 3.5740690751170803, 6.570321286129227, 9.696752162882825, -9.78109531405013, -4.064485073918932, 12.618294698854065, 11.478319940234707, 18.523488318202556, -20.802243179064572, -6.045640075017722, 1.590209173431999, -8.068422003615936, -16.67618914649281, -1.7854140823564748, -24.904797142551434, 14.979655055205933, 25.34266042587464, -18.960431693182805, 4.025836037753337, 5.632214679041212, -16.336175155135162, 1.624954405530878, 15.96532988766977, 5.254058317013742, -11.218548294947224, -13.245247536396972, 9.529387971774344, 25.617825157779077, 26.228576306046804, -16.571526214732938, -9.470479673717835, 9.165109525778997, 19.638928778050985, 21.955246182870013, 5.947053090258441, -7.2296018302525225, -4.052543450328597, -0.5990436923674199, 5.853830208355717, 18.184415608229703, 19.096751840039765, 6.786635998732303, -11.236989838090313, 3.807437208515558, 5.374796545720424, -23.920044410603328, -8.358567817529647, -5.086293950165497, 0.4346221003316521, 5.03996692696168, 0.910530481577047, -5.012105055963444, 18.16109828072071, 1.869827785492614, 1.2274609483288623, -2.7720088362584923, -0.16767684111226563, 6.016246664157598, 0.9836581069864554, 2.147175354266979, 3.291561858620317, -22.199863215089383, -27.84593296424896, 10.322291233839845, 2.1951882204468736, -8.544078615061704, -2.221802558250603, 4.21148609313691, 13.19000802740444, -3.0477357683582667, 4.96115067729102, -6.0730736966272145, -1.3958174607041924, 5.056215859028771, -6.237948564175818, -2.0892964035287944] },
+  R9: { bias: -52.816061865485416, coef: [0, 1.0186468606941814, 98.0670825588993, 37.60742043660794, 24.697798701089457, -57.51557169928027, -2.7404259894201437, 5.817428433511254, 4.949282879649009, -27.04886716690964, -0.4222159009889327, 4.436589979484047, 8.14920779080841, 87.4989608437806, -185.27234714348012, 27.33349222632901, 126.08788071678585, -84.91928588745301, -44.586224713977224, 80.86784746644264, 9.671334746296337, 72.40896316897533, -22.328002350853072, -32.68862905792346, -5.367967700828011, 68.65036067647304, 32.02905542377178, -4.524170841808578, -12.85853500891883, -5.11266885472428, 14.437110823895285, 10.205147551863659, -2.308393852404372, -17.34954380513075, 4.695901715473704, 24.632598677665516, 35.066768816899014, -10.376659870457475, -16.380769009369043, 44.28828586898072, 15.062009857961419, 5.988943399933891, -9.484643228111773, -31.7199265710119, 13.973336921837149, -40.35254261684866, 64.16842984904429, 14.262962815097353, 5.349564965242911, 148.4087005717711, 1.7628771021948126, 25.668311272315492, -348.61767409783175, -151.23034716505254, 141.69284013256072, 53.39650000201909, 1.796173984891855, 51.61384134379932, -142.58365832285088, -14.475951192083784, 50.02227019320106, -42.750384714108286, 42.62526293456698, 10.201030527279734, 3.44009128063458, -14.448009376481222, 34.264678477989975, -76.64756647261231, 109.59860398444788, 120.43056988236619, -67.1430915854971, 46.03185002888847, 80.26147760779493, -75.63455623701678, -73.10762322724, 60.87269657768954, -11.187476983911983, 31.852644174632683, -15.362244468710596, 19.232660297452846, -123.40849940043232, -20.403559285116494, -1.8456164350564064, 58.33302167628838, 93.63031940284337, -59.75034184827835, 33.42760597674306, 66.84897741933115, -56.20371582816743, -27.72848740434219, 22.724720734227247, 30.730799574878365, -2.759051225181656, -13.791561176156092, 19.191052406252723, 4.5367336650691765, 34.25089704595346, -22.49606360949821, -13.532582398212803, -7.0065267623772725, 19.129558893730994, -39.86531203488979, -29.545761436947984, -67.00539882040259, 2.7806558219912056, 48.98403218216663, -10.203579366843131, 25.380595640796788, 46.50175178227788, -37.08662924533129, -28.130483334220816, 58.487124169009455, 42.721869220342676, -37.75440624174292, -41.7228082347947, 39.99059271580364, 43.56568968759034, 56.077990509821724, -30.41954557200823, -22.236064654529272, 26.259284038636647, 45.80149113657564, 48.94801006075274, 26.78504299897207, -31.86589814626082, -33.953433157966515, 1.736045525839699, 17.986938523595313, 51.51839879740996, 39.295043498947614, 7.5711799233669055, -19.80866481152627, 6.74219589231603, 19.725781730643114, -33.16792620423214, -0.13382305104748654, 10.948104166294108, -7.9489694477073956, -7.458757128768165, 19.89173837876819, 10.444670410962742, 35.690177526430915, -1.8487725708266118, 2.3522086056414726, -11.625729252104945, 2.941007719927981, 28.180973158345324, 8.605282802958452, -0.5682368319452354, -15.074531143051988, -44.24172003288315, -54.65333876557045, 15.414882935165613, 0.31045225765185913, -20.417660582852978, -21.580821204763048, 11.569060508439991, 22.722636883493447, -9.219570632514376, 3.383525398470566, -12.903891172928123, 2.8125313399507332, 11.283003556805184, -0.1904770159266852, -5.320735980140801] },
+  R10: { bias: -0.4512988124395605, coef: [0, -7.029121915840098, 19.32811944191844, 25.515820799806193, -5.577407933902662, 12.407027299430087, 35.93286430590036, 9.68611048301405, 3.943123137582371, -8.658020976492026, -23.167016631605527, 18.93801398757704, 2.9876896564782673, 21.987943532576786, -23.357082349017816, -8.387156172178962, 4.503430820314541, -17.178268002750826, -30.877110632715866, 43.20159823848944, -9.15375611397444, 43.32256901662598, -11.206238134524398, -2.999675497355214, 23.306373591066333, 26.758611446643474, 33.64323348748505, 5.152309927085316, 6.966087369829381, -15.081830717367946, -1.7560598461365973, 24.210765888368154, -3.141136596853751, -22.29709718824246, 14.989475428163729, 13.203990517919253, -3.129847731270609, 0.6892470619544229, 8.757669677170819, 7.079778141131266, 9.275049051238964, 10.398439998850721, -2.715567937182692, -2.9204955830958683, -12.199176512486146, 26.810582153727534, 19.887591169993392, 0.3789852203389447, 44.452788392634666, 1.7203634577034064, -0.02694698109139928, 29.263565724327034, -13.513156664175497, -30.69990652408586, 2.570860631615846, -10.47550212998182, -18.155068247911537, 0.05448664867380333, -21.536787717719474, -28.34409609045359, 21.595108127516163, -30.509375956084273, -25.961349410654567, 16.88503691140802, 13.212333848383985, 30.95030390639235, 8.236536091477648, -30.227642427172686, 21.660528045473953, 41.86739943196573, 16.15028982322325, -2.891551547429942, 6.289223895416511, -22.918179975390682, -28.840468368383213, 31.56178505098489, -28.325972220628206, 9.867667091750011, 2.3227409383515916, 13.42486632327589, -9.554226357799005, 4.684852373014188, 15.840881952766587, 20.881972938012503, 37.76551760280539, 10.312678797828621, 12.41085865501904, 11.309595270175254, -20.95694917311063, -23.23285484913841, 23.171789385708834, -3.8902146950415437, -4.9397851826111765, -5.477506343991686, 6.358611403579946, -30.733832249202027, -37.388773731165564, -3.4677770370804955, 28.546216144706996, 7.487182797245032, 12.43332543782343, -12.711883951034329, -12.952800974401297, 6.0263215792209985, -22.679573895950025, -5.723608309807926, 13.914056947856215, -25.681104237641502, -7.304584090305289, -0.7564621641445376, -6.071166111828876, 15.271224107764903, 13.863443572077959, -15.185899213288067, -22.18899218957232, 15.466017122728807, 7.131822857701507, 7.786713836730226, -8.687567219781895, -4.732714116623542, 20.62173040368364, 16.7930576881561, -3.9067767426443445, 20.213961013376945, -1.2755279916121494, -12.598063583457803, 14.158770525357655, 12.629492725654167, -8.946790173084935, 3.74699103679251, 1.6991824648494946, 4.801898204680311, -3.3134444386784727, -4.016799044491851, 5.082927381390645, -0.9382930999869272, 2.4155493808435646, 8.85350932656885, 8.344063554220764, 13.91564787467825, 11.318607356860403, 8.022075214967982, -1.466737795106402, 2.9423033043022846, 1.6619944375104778, 11.265123090157473, 4.601932846046567, -6.376396014519255, -3.524280634083756, -21.350607154214124, -0.04344161089797393, 10.70341433721382, -1.6086639028315541, -7.849228606549693, -1.5928773328290378, -7.9935531974359355, -5.87118329880475, -8.82668488619266, -5.858849430437822, -6.947695589669164, -0.6418893234499776, -0.9103387523296413, -1.3561302205734005, 3.163788502035491, -2.3902966173225955] },
+  R11: { bias: -30.700087719622275, coef: [0, -4.074695345062285, 26.188339558548844, 24.309928438315854, 27.511912196919674, 30.253944617853982, 8.418885488335297, 13.990709853210364, 9.03184361701351, -8.24701625280946, 13.76212889319568, 5.36057683604041, -5.6779311658708815, 39.23789519679473, -47.80966377637787, 5.015490267320509, 41.21330468418094, -18.541140481596283, -42.38295831411148, 33.54221092992218, 13.047606070903274, 97.46500869539472, 21.640836327621333, -37.09229673802312, 4.51923433138689, 25.87033674822244, -6.587156687929674, -3.6471504923247915, 9.263488120678531, -0.8781976516265682, 1.774785031334382, 1.3680646465397257, -4.26000286849328, 12.613825938232159, 5.1231506931814526, 13.647719440813153, 17.87751696135863, -3.7412292887574146, -3.2460092025475302, 11.769971652288424, 16.939476696668162, 15.293169376025878, -8.367044099202456, -5.517667764493963, -2.6507444502126014, 6.943604969932445, 19.59289509936891, 32.94140087832508, 19.659984755631765, 37.20933776246223, 33.36303068758397, 34.25812704220754, -114.36687114490995, -37.921590707475296, 13.996063823439906, 23.988278102794624, 10.010388406304795, 15.226280221146967, -71.95032977722137, -11.006139388599342, 43.00799324371356, -49.93178622162317, -10.1570447311792, 3.4130469991221655, -24.469122039448727, -13.225510277831114, 8.691765082098362, -20.59859387273166, 73.3087222643622, 99.36173942583711, 55.69927486978461, 29.295347148758417, 33.870356339055554, -31.581555505195837, -32.78763900785885, -20.43183702188521, -61.85751421638497, 3.011659629802082, 32.02237472792764, -5.951117751250272, -9.944195492593465, -5.38420523475069, -1.115590902156837, -21.765985372257298, 13.333785652227627, -14.987537189388663, -14.078809897078495, 1.4379523860131944, -33.180144125930056, 4.724828864690117, 9.619492521597758, 0.8302497709315916, -17.55961744601311, 16.34605293974731, 20.990740224821625, 21.223951138746607, 24.91377319186205, -26.1855525749929, -1.756215206040964, 24.776173840857513, -12.731129059181722, -3.5024596986803394, -8.281978917089114, -27.400545464961205, -15.733714888765604, -4.189639546599501, -17.631002832043894, -6.226811577036623, 5.519967249872672, -12.913345341636422, 15.409392234874995, 15.614675143377559, 5.101392721845506, -10.662153831330192, 7.449822217148174, 5.834396678140595, 31.698839691189153, 33.05226383160906, -12.067305093345412, -3.6253781521447905, 22.323342842560137, 15.056450897281497, 4.886558918720532, 16.329057412753304, -4.612599443295958, -1.4981248484423275, 6.963407035146238, 3.5944771217208524, 27.38126102479551, 5.236383848588723, 5.5614941352489184, -2.3305184504198864, 4.7891451176326605, 6.586525149569115, -21.693633886071236, 3.9043764833188805, 4.393071852600375, -7.029994006602567, 2.252371213309528, 8.086516575271112, 7.221799187036804, 28.68178584090729, 12.576381613066491, -3.918466563840869, 3.657170515342685, 3.599253113598323, -6.526131998066813, -13.15955232201509, -2.389671915544583, 1.7931490472034886, -12.155908060377755, -8.729310957229126, 2.314846498924762, -3.843254938959354, -11.523322953919244, -5.320786917466664, 9.158315063832575, -4.548006630614455, -4.6123341632374775, 0.38741551705277216, -1.3471671937328227, -1.986027974696287, 4.157859420212019, -0.5039936579928779, 1.5266042497358174] },
+  R12: { bias: -47.161799406498396, coef: [0, -6.895031287393591, 7.180976297037465, 30.60207161339142, 11.283723501084872, 49.9257702834272, 43.55589594127584, 6.563848165446273, 16.66885339371134, -6.810491555941194, -39.132699576756345, 25.418577256926326, 0.2471700581794298, 19.449562433897082, -30.79576967294676, -13.90063210924753, -13.628478584300401, -5.5777535408152605, -30.075448376753044, 57.055831048996716, 12.222098586658623, 66.18507048489995, -13.117051029054254, -14.602928520526813, 26.500528594751813, 31.421117743347075, 40.70816435675653, 10.045889984597162, -9.905316864203463, -31.096514840698667, 12.44872200420627, 21.396935886376987, 8.23562551334346, -27.550680724873043, 8.447088834162656, 1.009034407180218, 2.980126676495272, 13.686351386107582, 30.398800656588023, 11.33908530233876, 1.125780501411075, 37.569784163796974, 21.000073924628484, 7.344174130365834, -33.28282238164152, 44.2194205950912, 31.687975664465544, 5.647265560564332, 64.24651888455799, 2.266707609304895, 1.076198654691125, 56.44755264716424, -7.6257360450051745, -31.57634627761552, 2.483904547147918, -31.00414873829867, -34.56656488959525, 1.9122013289419595, -13.329710985955963, -32.49771164051441, 36.744970121517156, -47.0167243720063, -70.00516783652333, 0.7927265547003034, 38.36557283973455, 33.8187328561497, 9.720205718809126, -4.881223834528409, 36.78083315195186, 54.10772340241889, 19.383619841165725, -21.427929735422943, -25.815629309877142, -43.69564157201944, -11.090964237835664, 7.01645068404873, -46.31654248410951, -3.8670355588244707, 12.526181320405858, 3.7019665297927498, -25.366187161300598, -15.836627754597831, 15.215003463764186, 17.74572095140095, 26.521673786729984, 17.487994506323485, 11.617964925257835, -5.395258183240084, -28.047525472113183, -10.921033510322408, 5.89694303481, -21.874817698046755, -32.450542455002065, 1.3987026369913989, 8.16815081426816, -28.159385960500487, -40.295697497390414, -27.298745973155118, 27.31496042969856, 9.233239395564036, 33.74429430635655, -28.599784931862644, -29.973183229968992, 6.453861900714434, -9.186813370855052, -7.945223596195059, 14.819172089059844, -17.773484211470237, -26.1767931121168, -15.842302101726672, -5.019019090081139, 8.991638313954839, -1.6678055064069106, -19.156006429522222, -3.920211385981272, 28.173743926580265, 25.348679112995242, 13.408762809341114, 8.239969817078912, 19.468002788207933, 26.030634668655214, -27.528059378583585, 20.998857073228855, 19.714372805891564, 8.586154080611745, 3.5243027010645975, 27.495100882104044, 8.717223234820361, 2.7858940530684624, -16.15726252899196, -0.9291202857994234, 19.355908747488492, 14.016960930309777, 15.306482935364835, 15.158455209206272, 22.370071990365908, 17.89043700951675, 5.8588227808755295, -17.31614938143548, 42.70554072647043, 41.884289845312985, 19.92547977372621, -9.49030309271227, 12.90251273212076, 26.035608372161207, 35.79782460492055, 15.277479444593572, -5.634548060993694, 8.877408730192013, -7.638876864118083, 24.462586790258477, 25.635054214465594, -13.784045723317702, -32.19932208867306, -6.140930849484705, -9.712443135130226, -8.563687625238066, -65.46634163059007, -42.49884489164439, -16.263213651452197, 12.803471905011934, 4.185329141121228, -11.39164377466393, 44.51327829556078, -11.36681194723112] },
+  R13: { bias: 34.87516402145153, coef: [0, -8.708194536320258, 22.99868688156576, 17.926488750589552, 17.949248978044523, 11.664230144440914, 2.6575176957279862, 4.680398396672551, -0.8273607363301003, -5.186599154160736, -5.961354783541332, -2.9339513565870474, -6.672695137908485, 32.667771533575824, -34.27809080749228, 3.030707504994197, 28.635685012331166, -19.333043761290465, -21.653618404099827, 27.727886768520218, 12.69165928264561, 28.363026355617233, -2.658899164578221, -13.026960446297217, 9.585085173652274, 9.267681153355284, 22.182257945963446, 4.890786760336705, -3.1994210391770515, -5.276689927035778, -2.9557204183643924, 18.659783388104273, -6.773958675140824, -5.1319090915454595, 5.920555026697582, 3.611060214820155, 8.624849349597117, -3.385417986529282, -0.5669553074673801, 7.099426238435734, 8.931722891620828, 1.1517134937388558, -3.14942040788225, -4.288172268252857, 0.5195649987161425, 1.285103785098227, 26.987249948798926, 11.516511683204378, 3.8597137818806804, 32.69612328286059, 7.790388539385978, 25.63169928836972, -69.64460443791515, -25.24082892335839, 2.7497009797967777, 16.52075050163381, -0.9072869653775021, 7.2634144125027404, -43.263084990749604, -12.259021668152569, 17.317737974011944, -33.95695245257359, -8.411661198214565, 5.332507500885929, 6.138367870820627, 6.316766305478793, 7.305709140807661, -14.267207697004432, 20.450222987132303, 45.588530915962664, 10.344676027080705, 6.44161100700918, 18.532657242254313, -26.891371249000365, -23.759032204988948, 15.008497649863457, -16.91022984432729, -13.100498630859356, -0.19782776063519972, 3.0178989121562165, -29.26001936169141, -9.013749921732293, -12.405180633965196, 18.99131230052431, 33.78513689485568, 10.183789813096745, 16.861204894370207, 17.79713945894928, -19.7937923851717, -19.356142525787018, 14.31815562246048, -5.0896027169139115, -12.530665081270097, -2.5518320668063796, 5.463747316817421, -2.909900705359176, -8.879160627150737, -1.9791057697810868, 15.683145289113186, 12.684743851016236, 10.434993768637776, -8.487260060099569, -10.494810143010815, -8.148992252727194, -22.161737456911787, 2.2875283433374474, 5.531599365960236, -11.522478308394495, 9.829998780360569, -5.130602831794818, -6.563280805675348, 15.971882442717344, 16.82755308794597, -22.467443834641873, -16.223503767247276, 9.021107323562331, 7.982084264345507, 8.131536413910613, -11.901588264681981, 2.1732713092587974, 17.939559336359146, 5.289749522130021, -0.5032581364754266, 19.470515782399072, -1.2197286095709081, 1.1165040650683136, 9.635874488753553, 9.630064486329536, 6.078857639127259, 8.19455147510804, 1.6203716840644518, -3.189250574123444, -4.067689256057794, 0.022746118140939443, -3.1771706226466825, 0.7590662385122771, 4.224228915855922, 4.148211267766556, 2.833484047054866, 7.548473057175295, 7.122356496336662, 6.144924292635626, -2.9799887137330163, -5.465541021803917, -2.5009831988043514, 0.25007999318666346, 6.973714659184394, 1.8150529737856582, -3.7472938520659826, -9.790485709288449, -5.902377705058366, -1.3069136671880015, -0.29080862243103306, -3.2818616745473785, -6.048155222163074, -3.773682629264966, 0.7820742515752805, 4.468013098359539, 0.13388946319018938, -3.899758746736856, -2.7436708267976364, 1.011630492122655, 6.1994515565683255, 1.535040449953381, -0.5601963626603177] },
+  R14: { bias: 55.753736795666725, coef: [0, 6.638242761117741, -4.4498378373966165, 13.42848931709433, 0.3607561249447707, 9.24864659694028, 13.129979091395404, 5.189324343802921, 2.712870456428352, 1.2297959759661432, 0.7873018091720294, 6.042901407208671, 7.040892457057111, 2.8575374082658764, 0.4759464366864283, -5.974810032064683, -4.574371972841307, 18.13320160840337, -12.127032184885383, 3.717496442973839, -1.0507581558080494, 10.665820486709478, 1.9316258691670007, 6.112673623638773, 11.634837730877942, 14.936360742050708, -11.086605103814836, 12.790385862173085, -0.8276149780725838, -8.030952343517496, -2.899534163763306, -10.052855100830516, 12.607368801437246, -4.203344644002091, 7.6679981660954, 15.527631515280495, -7.351966994503257, 0.23010148066346003, 2.741239267849961, 0.9589528685143427, -4.9909358300241795, 5.637915994804268, 1.4786380532943877, -2.185521596644187, -1.1515318156837138, 4.815831725467116, -4.268548864474616, 12.678359387255904, 12.993289920699157, 4.4734590595441315, 7.776708552444836, 11.884955283932253, 7.745903850167627, -1.7689581232839222, -8.1508750043755, -9.95189016077953, -11.900105562359037, -0.013546320346703151, -0.622678391455778, 7.5745123588772465, 24.38519562413715, -5.769137850253696, -9.726263412748077, 2.5380911098123367, -12.251558723549051, 1.3422651365205713, -6.500974258120521, 1.7972074587701574, 2.344979290042226, -2.6313976208309695, 4.3527514272116505, 3.360838493431966, -5.513237182357573, 5.8434657339761165, 0.06734713331440507, 2.7530134077268245, 0.2760390934146875, 9.327313311632036, 5.859946223144553, 1.9013022836729914, 14.582908187554485, 3.9087716713921057, 13.394377670565623, -4.786565556159208, -15.264379332392933, -25.222702800635123, 12.576965186495547, 11.3497297117265, 10.376866121436334, 4.508449717020673, 3.7299581619831303, 6.563337587858182, 0.20339525882256274, 0.8710699773712036, -5.279056422806999, -11.01422296065729, -3.3087224033460654, -8.424492519900992, 1.7012436460837352, -9.400767370054908, 4.3765884459773385, -1.967060628438736, -11.490891317976683, -3.204594997433245, 1.0137079078799052, 2.1925741566123893, 11.705682215266734, -0.8451991801237344, -12.818592529665919, -6.003356712344576, -4.917346295805885, 0.9333106882190112, -9.553798786456774, 2.7218335741136457, 4.293822490383169, 7.610608012884189, 10.449849880074312, 10.81834739950571, 12.069541601440163, -1.0499156508679541, 3.8589671222943434, 13.405031155448698, -0.2790770716583153, -13.57324231845769, -4.222238730570157, -1.4745509322542136, 9.006329105287355, -1.1178496084324687, -2.2849089656752293, -0.779192243570497, 0.8446799956922109, 6.404441531667045, 0.9867623979708035, 2.01949176607271, -1.4519367711264493, -7.385601447353981, -8.728712215963805, -6.65865452648323, -2.9221851499467713, -0.11567019954074381, -1.309520886391247, 0.21634571503302316, 3.127776078731685, 5.086627228419628, 5.230553292615565, 6.856447635122383, -2.5216173225713034, -1.7274672327822624, 0.30010453487505906, -2.4982101861455894, -2.153716154441147, -3.055213322647932, -0.4566706725800345, 2.4783908410864304, 4.8264108062306175, -2.2653293684081572, -1.9406583699032083, -3.406714872940226, -1.121474361748529, 2.615627332894184, 2.853494921173315, 0.40623932639221055, -7.080619664797354, 0.8470757978183069, 0.8911981376371378] },
+  Ra: { bias: 35.11615094255464, coef: [0, -5.945368859647145, 15.754100886243307, 20.824209523565912, 10.325674898817756, 7.325859078256037, 8.497249926763486, 5.107806910714362, 1.8281426525307456, -3.3336269728022754, -2.7103612133560175, 4.249717670102114, 0.8619631987038916, 28.68694637830085, -36.713734784505554, -0.7749406391244696, 20.733166215451185, -5.797551722134148, -20.360016668050577, 23.377323009259285, 3.8077241377567446, 32.38397713745191, -1.427589342622898, -8.16230721434348, 7.513146401748279, 14.202906770159892, 1.1385384723547318, 8.997584711470925, 3.7380685164398466, -7.7172820552432535, -0.7183541408799331, 4.241360383061866, 1.0491449402741269, -3.8847532159184754, 3.8328942955443104, 12.08141388767378, 4.372434840724802, -2.364074527905596, -5.103698992093183, 8.074768340039169, 5.658175225074892, 5.116948051339288, 0.18433402502120888, -6.205788094204829, 0.266189172717374, -1.275536809693027, 20.208030041796405, 9.930853590417914, 9.79092942032122, 32.73408061190642, 4.428546200361767, 22.07878817359349, -67.2123706150523, -31.06991722292649, 8.964027181927156, 4.983177511528784, -3.47850426004062, 9.029134444181503, -26.54857508408358, -1.557266454371418, 23.462008544960423, -21.4827291425238, -4.861813442000502, 6.904075767807918, -7.090840461525117, 4.761167276979935, 9.197485659690004, -11.737638221963993, 29.569181778660337, 41.37642636403024, 1.001470026623357, 5.879968847738415, 12.294543974125599, -15.923965758753361, -19.434145277502278, 8.078045522242592, -18.534855045513027, 3.462033503053488, 3.5877951683810037, 4.885127732495992, -12.841654205886481, -2.753335981555892, 0.22084952408199368, 4.163795041162796, 13.96075025562417, -10.473978892700359, 7.596859416417717, 13.485925204357812, -9.532249663282611, -1.5805142603306404, 11.14576022241408, 2.4103498491199993, -10.838872031058878, 1.1599097157235327, 8.733919005338974, -2.125574997643616, -2.046362440257478, -14.864417712536913, 5.947961539627723, 6.682611965580549, -2.556165056370194, -9.163766771519024, -7.220106631658515, -8.47096680559623, -4.8609118763238275, 5.8826900735860415, -1.275617873721123, -9.110590937813763, -1.7750566434005202, -6.153270455901386, 1.1978161593628598, 9.21452463537701, 3.9064716752273903, -10.707475351965495, -7.672281563415075, 6.602105480655338, 17.15516560531857, 17.044635927190498, -6.707218665457569, -2.337884356752649, 13.026137742561245, 10.139676062622701, 2.9879301988060503, 6.368822563237801, -3.352923184563607, -2.531103533737885, 5.151219035586158, 5.867456121236468, 7.670064118163279, 7.241759398910897, 3.0595291080595897, -3.434858971067796, 0.8864168548070519, 0.8595132593688006, -8.130330362002548, -4.233505428883203, -3.082076186941011, 1.3229585200565288, 4.031726417528859, 4.254816253143824, 1.248695545098781, 9.734057268851043, 2.01203681088901, -0.08490257419897619, 2.605167027443506, 4.135949720408433, 2.047174440453337, -1.5596128952938708, -0.03781514860557385, -3.7698363367689494, -8.987795409375781, -7.714556122622652, 1.76460234946913, -2.0288068079441004, -4.727828282091771, -2.5596934320430633, 1.611029037630695, 1.6622661626703428, -2.807741213863119, 0.5774039539815243, -1.3344437403258957, -0.5467460311588223, 2.498976978348045, -0.1344333212350262, 0.06689776651020109] },
+  EML: { bias: 0.926090328031742, coef: [0, -0.1337633411795574, -0.3554802080192002, -0.25524992311363354, -0.019721431362117313, 0.376751756892552, 0.4965361071428945, 0.155302454312473, -0.031409608611440376, -0.09030450977867334, -0.1551241319489966, -0.1971522288262753, -0.0765614998407993, -0.12165570321777744, -0.1297225570541065, 0.055215731735630685, -0.0616817647381293, -0.15255671853510064, -0.13937418737199375, 0.3246371214566654, 0.2618211786515654, 0.01765764186542505, -0.018563161877567663, 0.037604992844263926, 0.23122606998558007, 0.20085173841634732, 0.08563137617150936, 0.09925586159087543, 0.07488381467169584, 0.12403080611404825, -0.061947024133099965, -0.2615201663079166, -0.18080877768611892, -0.021050762276596777, -0.06178957693377864, 0.1349763838333615, 0.4016785307522327, -0.0248637485092749, -0.053294783934428616, -0.03631457026753779, -0.006747578343685525, 0.045932760826685744, 0.05198368070948406, 0.0033757069487283966, -0.006760846679105155, -0.08069618508504271, -0.13995813667466092, -0.1715361108250796, -0.13746667813976657, -0.077138469520427, -0.06096655693088602, -0.007612050524258109, 0.005476002894149236, 0.023108296565156762, -0.026774015137202074, 0.03834824631797663, 0.05027727414025079, 0.05792755540774514, 0.032659001170745806, -0.009889828442791208, -0.09640417010273823, 0.03560105232312674, -0.06109008097326177, -0.151205808000745, -0.1704902803509928, 0.21273534972109742, 0.24427572158600216, 0.27009126393293914, 0.11269317958491241, 0.08587576898044903, -0.03199619700156964, 0.09381256719543826, 0.02261484730312434, -0.08275146662414863, -0.107969742357321, 0.12623334396355465, 0.07265841538784625, -0.04033205271212741, -0.07373926186443336, -0.06102713661546943, 0.1606425617806156, 0.1731080798197248, 0.1745730933289238, 0.07340727496850827, 0.0515142536266646, -0.006961816731183174, 0.0568113261866788, 0.014181605264552812, -0.0229712035766222, -0.015128248034445076, 0.06780180479691793, 0.03208214520441471, -0.01235263303145555, -0.018298983430799432, -0.029604173315370203, 0.03702802328124269, 0.023035986941491837, 0.020659416324798775, 0.030522407187659986, 0.0026004191909278955, 0.02874749890560279, 0.045624376263425324, -0.004970221239842577, -0.12124810066705434, -0.050731279357302386, -0.17192515141447182, -0.1780590414489434, -0.05890137231833746, -0.18520539994786936, -0.14884492552212344, -0.06687197395103109, -0.03650667242116436, -0.13940547460319933, -0.11605638266244137, -0.07074434406396785, -0.08776542710766695, -0.0257630104582107, -0.06722100802358949, -0.008344736857923163, 0.04869144401351224, -0.0003746623784997377, 0.059001002722511256, -0.08196064712966354, -0.12810302672003054, 0.03228119388858473, 0.19535555618550093, 0.08656751983306275, 0.17850022294207393, 0.5052245623220553, -0.015286924809314914, -0.02657942074978462, -0.03506656888063839, -0.014906615414272906, -0.01967689352329582, -0.014526763624737924, 0.004335168366603043, -0.006884360029513926, -0.014532793882295298, -0.012984618628570671, 0.03971884780829191, 0.0345026737056405, 0.005626320118288203, 0.0014046564807286704, 0.008653751407038817, 0.028917714358263867, 0.025685583050785773, 0.009677547345807891, 0.009823118798462219, 0.008674294642427334, 0.01135384072701521, -0.004106640852425495, -0.026094407807613434, -0.021405376158110424, -0.007991433455066388, -0.010068872892222594, 0.00800716552142314, 0.027542808527652177, -0.003908820601750778, -0.007664984406329188, -0.00512813743229488, -0.001241484142918626, 0.005750280188744806, 0.005766968266821915, -0.0006029438203755133, -0.0010951333299361959] },
+  A: { bias: 86.46788704889559, coef: [0, -24.647042168317743, -15.152583845366497, -12.91564325765036, -6.2462034760722105, 5.054685651232025, 5.867301721322194, -5.741905164023143, 4.24718325933543, 0.21972461974118676, 0.20975373617066206, 0.35352291534694336, 2.4783023494453795, 0, 1.4644312000461592, -0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  B: { bias: 1965.5907125553545, coef: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -0.8453284221589547, 2.774906886507787, -0.9164221555825267, 7.772882025985795, -5.684427969966752, -7.51753297153922, -23.806944037066035, -11.681733161137377, -14.128960871308738, -2.1460402461445494, -24.507510812863536, 1.7917338621128414, 19.872489797914653, -11.227724710650813, 8.27589701249944, -14.29797490872446, -1.1347328597085167, 3.1714741343624824, 27.377964170263315, -4.949487868494982, 2.288348954190222, -12.802291318591017, 13.05632172923082, -11.942106448683885, -3.348010049024392, 14.2672760878651, -25.849453299273915, -1.0193610338126318, -18.237372815643567, -2.771188496794077, 3.717955391642863, -20.741083503208955, 3.8075286907858854, 18.919953627289477, -31.883404642958382, 7.59660662031179, -1.5554361905385181, 12.994982381481197, -2.3930051239635923, 8.381155369731353, -0.26756560729432693, 0, -26.145991715972627, -7.9751364998440355, 0, 21.831620015726003, 44.86524295064498, -16.36808447011221, 11.059854725030714, -3.094095255224713, 0.3162553342437067, 0, 37.33622126625642, -16.900106225690017, 23.59548815279591, -0.013039125363229598, 24.743498918714597, 2.777035899505936, -29.733705635538907, 15.160417544149684, 1.0116975905718035, 0.2765000554080652, 18.887005805511716, 0, 1.4755847922195522, -9.479335033924318, 0.009686449988742997, 0.8371924931618598, -4.0558376545530015, -14.175624538708512, -0.111397948916426, -11.90120138355672, -0.6631093591114832, -0.012550497135534194, -7.34842522437964, 2.8469988988026063, 2.245755457839454, -0.3268983028130291, -0.13123481715505922, 1.8023754230825548, 0.8960628584051477, 6.576357999885972, -24.14357941605277, 2.0721690558048365, 10.26150793156397, -3.503158634865669, 3.795111301780839, 8.193103048119147, 0.9674570868411506, 6.864762416020401, -6.105383119093734, -7.767097590715353, 0, 0, 0] },
+};
+
+// Exponent vectors for the 165 polynomial features (degree <= 3 in 8 variables), same order as coef.
+const LM4_POWERS = [
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,1,0],
+  [0,0,0,0,0,1,0,0],
+  [0,0,0,0,1,0,0,0],
+  [0,0,0,1,0,0,0,0],
+  [0,0,1,0,0,0,0,0],
+  [0,1,0,0,0,0,0,0],
+  [1,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,2],
+  [0,0,0,0,0,0,1,1],
+  [0,0,0,0,0,0,2,0],
+  [0,0,0,0,0,1,0,1],
+  [0,0,0,0,0,1,1,0],
+  [0,0,0,0,0,2,0,0],
+  [0,0,0,0,1,0,0,1],
+  [0,0,0,0,1,0,1,0],
+  [0,0,0,0,1,1,0,0],
+  [0,0,0,0,2,0,0,0],
+  [0,0,0,1,0,0,0,1],
+  [0,0,0,1,0,0,1,0],
+  [0,0,0,1,0,1,0,0],
+  [0,0,0,1,1,0,0,0],
+  [0,0,0,2,0,0,0,0],
+  [0,0,1,0,0,0,0,1],
+  [0,0,1,0,0,0,1,0],
+  [0,0,1,0,0,1,0,0],
+  [0,0,1,0,1,0,0,0],
+  [0,0,1,1,0,0,0,0],
+  [0,0,2,0,0,0,0,0],
+  [0,1,0,0,0,0,0,1],
+  [0,1,0,0,0,0,1,0],
+  [0,1,0,0,0,1,0,0],
+  [0,1,0,0,1,0,0,0],
+  [0,1,0,1,0,0,0,0],
+  [0,1,1,0,0,0,0,0],
+  [0,2,0,0,0,0,0,0],
+  [1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,1,0],
+  [1,0,0,0,0,1,0,0],
+  [1,0,0,0,1,0,0,0],
+  [1,0,0,1,0,0,0,0],
+  [1,0,1,0,0,0,0,0],
+  [1,1,0,0,0,0,0,0],
+  [2,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,3],
+  [0,0,0,0,0,0,1,2],
+  [0,0,0,0,0,0,2,1],
+  [0,0,0,0,0,0,3,0],
+  [0,0,0,0,0,1,0,2],
+  [0,0,0,0,0,1,1,1],
+  [0,0,0,0,0,1,2,0],
+  [0,0,0,0,0,2,0,1],
+  [0,0,0,0,0,2,1,0],
+  [0,0,0,0,0,3,0,0],
+  [0,0,0,0,1,0,0,2],
+  [0,0,0,0,1,0,1,1],
+  [0,0,0,0,1,0,2,0],
+  [0,0,0,0,1,1,0,1],
+  [0,0,0,0,1,1,1,0],
+  [0,0,0,0,1,2,0,0],
+  [0,0,0,0,2,0,0,1],
+  [0,0,0,0,2,0,1,0],
+  [0,0,0,0,2,1,0,0],
+  [0,0,0,0,3,0,0,0],
+  [0,0,0,1,0,0,0,2],
+  [0,0,0,1,0,0,1,1],
+  [0,0,0,1,0,0,2,0],
+  [0,0,0,1,0,1,0,1],
+  [0,0,0,1,0,1,1,0],
+  [0,0,0,1,0,2,0,0],
+  [0,0,0,1,1,0,0,1],
+  [0,0,0,1,1,0,1,0],
+  [0,0,0,1,1,1,0,0],
+  [0,0,0,1,2,0,0,0],
+  [0,0,0,2,0,0,0,1],
+  [0,0,0,2,0,0,1,0],
+  [0,0,0,2,0,1,0,0],
+  [0,0,0,2,1,0,0,0],
+  [0,0,0,3,0,0,0,0],
+  [0,0,1,0,0,0,0,2],
+  [0,0,1,0,0,0,1,1],
+  [0,0,1,0,0,0,2,0],
+  [0,0,1,0,0,1,0,1],
+  [0,0,1,0,0,1,1,0],
+  [0,0,1,0,0,2,0,0],
+  [0,0,1,0,1,0,0,1],
+  [0,0,1,0,1,0,1,0],
+  [0,0,1,0,1,1,0,0],
+  [0,0,1,0,2,0,0,0],
+  [0,0,1,1,0,0,0,1],
+  [0,0,1,1,0,0,1,0],
+  [0,0,1,1,0,1,0,0],
+  [0,0,1,1,1,0,0,0],
+  [0,0,1,2,0,0,0,0],
+  [0,0,2,0,0,0,0,1],
+  [0,0,2,0,0,0,1,0],
+  [0,0,2,0,0,1,0,0],
+  [0,0,2,0,1,0,0,0],
+  [0,0,2,1,0,0,0,0],
+  [0,0,3,0,0,0,0,0],
+  [0,1,0,0,0,0,0,2],
+  [0,1,0,0,0,0,1,1],
+  [0,1,0,0,0,0,2,0],
+  [0,1,0,0,0,1,0,1],
+  [0,1,0,0,0,1,1,0],
+  [0,1,0,0,0,2,0,0],
+  [0,1,0,0,1,0,0,1],
+  [0,1,0,0,1,0,1,0],
+  [0,1,0,0,1,1,0,0],
+  [0,1,0,0,2,0,0,0],
+  [0,1,0,1,0,0,0,1],
+  [0,1,0,1,0,0,1,0],
+  [0,1,0,1,0,1,0,0],
+  [0,1,0,1,1,0,0,0],
+  [0,1,0,2,0,0,0,0],
+  [0,1,1,0,0,0,0,1],
+  [0,1,1,0,0,0,1,0],
+  [0,1,1,0,0,1,0,0],
+  [0,1,1,0,1,0,0,0],
+  [0,1,1,1,0,0,0,0],
+  [0,1,2,0,0,0,0,0],
+  [0,2,0,0,0,0,0,1],
+  [0,2,0,0,0,0,1,0],
+  [0,2,0,0,0,1,0,0],
+  [0,2,0,0,1,0,0,0],
+  [0,2,0,1,0,0,0,0],
+  [0,2,1,0,0,0,0,0],
+  [0,3,0,0,0,0,0,0],
+  [1,0,0,0,0,0,0,2],
+  [1,0,0,0,0,0,1,1],
+  [1,0,0,0,0,0,2,0],
+  [1,0,0,0,0,1,0,1],
+  [1,0,0,0,0,1,1,0],
+  [1,0,0,0,0,2,0,0],
+  [1,0,0,0,1,0,0,1],
+  [1,0,0,0,1,0,1,0],
+  [1,0,0,0,1,1,0,0],
+  [1,0,0,0,2,0,0,0],
+  [1,0,0,1,0,0,0,1],
+  [1,0,0,1,0,0,1,0],
+  [1,0,0,1,0,1,0,0],
+  [1,0,0,1,1,0,0,0],
+  [1,0,0,2,0,0,0,0],
+  [1,0,1,0,0,0,0,1],
+  [1,0,1,0,0,0,1,0],
+  [1,0,1,0,0,1,0,0],
+  [1,0,1,0,1,0,0,0],
+  [1,0,1,1,0,0,0,0],
+  [1,0,2,0,0,0,0,0],
+  [1,1,0,0,0,0,0,1],
+  [1,1,0,0,0,0,1,0],
+  [1,1,0,0,0,1,0,0],
+  [1,1,0,0,1,0,0,0],
+  [1,1,0,1,0,0,0,0],
+  [1,1,1,0,0,0,0,0],
+  [1,2,0,0,0,0,0,0],
+  [2,0,0,0,0,0,0,1],
+  [2,0,0,0,0,0,1,0],
+  [2,0,0,0,0,1,0,0],
+  [2,0,0,0,1,0,0,0],
+  [2,0,0,1,0,0,0,0],
+  [2,0,1,0,0,0,0,0],
+  [2,1,0,0,0,0,0,0],
+  [3,0,0,0,0,0,0,0],
+];
+
+// ---- src/colour.js ----
+// Colorimetry shared by both meters: chromaticity, CCT, Duv, tint, SPD
+// reconstruction, CRI (CIE 13.3-1995), battery mapping and display helpers.
+//
+// The maths follows the standard formulas (McCamy 1992, Ohno 2014 / ANSI
+// C78.377, CIE 13.3, DNG-style tint) and matches the Sunday CCT bench's
+// Python port of open-light-master to ~1e-12 (see test/colour.test.js).
+
+
+// ---------------------------------------------------------------------------
+// Chromaticity spaces
+// ---------------------------------------------------------------------------
+
+function xyzToXy(X, Y, Z) {
+  const s = X + Y + Z;
+  return s === 0 ? [0, 0] : [X / s, Y / s];
+}
+
+/** CIE 1931 xy -> CIE 1960 UCS (u, v). Duv is defined in this space. */
+function xyToUv(x, y) {
+  const d = -2 * x + 12 * y + 3;
+  return [(4 * x) / d, (6 * y) / d];
+}
+
+function uvToXy(u, v) {
+  const d = 2 * u - 8 * v + 4;
+  return [(3 * u) / d, (2 * v) / d];
+}
+
+/** CIE 1964 U*V*W* relative to a reference white (u0, v0). */
+function xyzToUvw(XYZ, u0, v0) {
+  const [x, y] = xyzToXy(XYZ[0], XYZ[1], XYZ[2]);
+  const [u, v] = xyToUv(x, y);
+  const W = 25 * Math.cbrt(XYZ[1]) - 17;
+  return [13 * W * (u - u0), 13 * W * (v - v0), W];
+}
+
+// ---------------------------------------------------------------------------
+// CCT (McCamy 1992) and Duv (Ohno 2014 polynomial, ANSI C78.377)
+// ---------------------------------------------------------------------------
+
+function cctFromXy(x, y) {
+  if (y === 0.1858) return NaN;
+  const n = (x - 0.332) / (0.1858 - y);
+  return 449 * n ** 3 + 3525 * n ** 2 + 6823.3 * n + 5520.33;
+}
+
+const DUV_K = [-0.471106, 1.925865, -2.4243787, 1.5317403, -0.5179722, 0.0893944, -0.00616793];
+
+/** Signed distance from the Planckian locus in CIE 1960 uv. Positive = above (green), negative = below (magenta). */
+function duvFromUv(u, v) {
+  const lfp = Math.hypot(u - 0.292, v - 0.24);
+  if (lfp === 0) return 0;
+  const a = Math.acos((u - 0.292) / lfp);
+  let lbb = 0;
+  for (let i = 0; i < 7; i++) lbb += DUV_K[i] * a ** i;
+  return lfp - lbb;
+}
+
+// ---------------------------------------------------------------------------
+// Tint (DNG-style walk along the Wyszecki & Stiles Planckian table)
+// ---------------------------------------------------------------------------
+
+const TINT_SCALE = -3000.0;
+
+function tintFromXy(x, y) {
+  const u = (2.0 * x) / (1.5 - x + 6.0 * y);
+  const v = (3.0 * y) / (1.5 - x + 6.0 * y);
+  let temperature = NaN;
+  let tint = NaN;
+  let lastDt = 0;
+  let lastDv = 0;
+  let lastDu = 0;
+  for (let i = 1; i <= 30; i++) {
+    let du = 1.0;
+    let dv = TINT_TABLE[i][3];
+    let len = Math.sqrt(1.0 + dv * dv);
+    du /= len;
+    dv /= len;
+    let uu = u - TINT_TABLE[i][1];
+    let vv = v - TINT_TABLE[i][2];
+    let dt = -uu * dv + vv * du;
+    if (dt <= 0.0 || i === 30) {
+      if (dt > 0.0) dt = 0.0;
+      dt = -dt;
+      const f = i === 1 ? 0.0 : dt / (lastDt + dt);
+      temperature = 1.0e6 / (TINT_TABLE[i - 1][0] * f + TINT_TABLE[i][0] * (1.0 - f));
+      uu = u - (TINT_TABLE[i - 1][1] * f + TINT_TABLE[i][1] * (1.0 - f));
+      vv = v - (TINT_TABLE[i - 1][2] * f + TINT_TABLE[i][2] * (1.0 - f));
+      du = du * (1.0 - f) + lastDu * f;
+      dv = dv * (1.0 - f) + lastDv * f;
+      len = Math.sqrt(du * du + dv * dv);
+      du /= len;
+      dv /= len;
+      tint = (uu * du + vv * dv) * TINT_SCALE;
+      break;
+    }
+    lastDt = dt;
+    lastDu = du;
+    lastDv = dv;
+  }
+  return { temperature, tint };
+}
+
+// ---------------------------------------------------------------------------
+// Natural cubic spline (as used by open-light-master for SPD reconstruction)
+// ---------------------------------------------------------------------------
+
+class Spline {
+  constructor(xs, ys) {
+    this.xs = xs.slice();
+    this.ys = ys.slice();
+    this.ks = this.naturalKs();
+  }
+
+  naturalKs() {
+    const { xs, ys } = this;
+    const n = xs.length - 1;
+    const A = Array.from({ length: n + 1 }, () => new Array(n + 2).fill(0));
+    for (let i = 1; i < n; i++) {
+      A[i][i - 1] = 1 / (xs[i] - xs[i - 1]);
+      A[i][i] = 2 * (1 / (xs[i] - xs[i - 1]) + 1 / (xs[i + 1] - xs[i]));
+      A[i][i + 1] = 1 / (xs[i + 1] - xs[i]);
+      A[i][n + 1] = 3 * ((ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1]) ** 2 + (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]) ** 2);
+    }
+    A[0][0] = 2 / (xs[1] - xs[0]);
+    A[0][1] = 1 / (xs[1] - xs[0]);
+    A[0][n + 1] = (3 * (ys[1] - ys[0])) / (xs[1] - xs[0]) ** 2;
+    A[n][n - 1] = 1 / (xs[n] - xs[n - 1]);
+    A[n][n] = 2 / (xs[n] - xs[n - 1]);
+    A[n][n + 1] = (3 * (ys[n] - ys[n - 1])) / (xs[n] - xs[n - 1]) ** 2;
+    return Spline.solve(A, n + 1);
+  }
+
+  static solve(A, m) {
+    let h = 0;
+    let k = 0;
+    while (h < m && k <= m) {
+      let iMax = h;
+      let vMax = -Infinity;
+      for (let i = h; i < m; i++) {
+        const val = Math.abs(A[i][k]);
+        if (val > vMax) {
+          iMax = i;
+          vMax = val;
+        }
+      }
+      if (A[iMax][k] === 0) {
+        k++;
+      } else {
+        [A[h], A[iMax]] = [A[iMax], A[h]];
+        for (let i = h + 1; i < m; i++) {
+          const f = A[i][k] / A[h][k];
+          A[i][k] = 0;
+          for (let j = k + 1; j <= m; j++) A[i][j] -= A[h][j] * f;
+        }
+        h++;
+        k++;
+      }
+    }
+    const ks = new Array(m).fill(0);
+    for (let i = m - 1; i >= 0; i--) {
+      const v = A[i][i] ? A[i][m] / A[i][i] : 0;
+      ks[i] = v;
+      for (let j = i - 1; j >= 0; j--) {
+        A[j][m] -= A[j][i] * v;
+        A[j][i] = 0;
+      }
+    }
+    return ks;
+  }
+
+  indexBefore(target) {
+    const { xs } = this;
+    let low = 0;
+    let high = xs.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (xs[mid] < target && mid !== low) low = mid;
+      else if (xs[mid] >= target && mid !== high) high = mid;
+      else high = low;
+    }
+    if (low === xs.length - 1) return xs.length - 1;
+    return low + 1;
+  }
+
+  at(x) {
+    const { xs, ys, ks } = this;
+    const i = this.indexBefore(x);
+    const t = (x - xs[i - 1]) / (xs[i] - xs[i - 1]);
+    const a = ks[i - 1] * (xs[i] - xs[i - 1]) - (ys[i] - ys[i - 1]);
+    const b = -ks[i] * (xs[i] - xs[i - 1]) + (ys[i] - ys[i - 1]);
+    return (1 - t) * ys[i - 1] + t * ys[i] + t * (1 - t) * (a * (1 - t) + b * t);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SPD helpers (380..780 nm, 5 nm grid)
+// ---------------------------------------------------------------------------
+
+/** Interpolate sparse sensor bands onto the 5 nm grid: 0 at 380 nm, last value held out to 780 nm. */
+function interpolateSpd(wavelengths, values) {
+  const xs = wavelengths.slice();
+  const ys = values.slice();
+  if (xs[0] > WL_START) {
+    xs.unshift(WL_START);
+    ys.unshift(0);
+  }
+  if (xs[xs.length - 1] < 780) {
+    xs.push(780);
+    ys.push(ys[ys.length - 1]);
+  }
+  const s = new Spline(xs, ys);
+  const out = new Array(N_WL);
+  for (let i = 0; i < N_WL; i++) out[i] = s.at(WL_START + WL_STEP * i);
+  return out;
+}
+
+function spdToXyz(spd) {
+  let xs = 0;
+  let ys = 0;
+  let zs = 0;
+  for (let i = 0; i < spd.length; i++) {
+    xs += spd[i] * CMF_1931_2DEG[i * 3];
+    ys += spd[i] * CMF_1931_2DEG[i * 3 + 1];
+    zs += spd[i] * CMF_1931_2DEG[i * 3 + 2];
+  }
+  return [(100 * xs) / ys, 100, (100 * zs) / ys];
+}
+
+function normalizeSpd(spd) {
+  const c = spd[36]; // 560 nm
+  return spd.map((v) => v / c);
+}
+
+function spdOfPlanck(cct) {
+  const out = new Array(N_WL);
+  for (let i = 0; i < N_WL; i++) {
+    const wl = (WL_START + WL_STEP * i) * 1e-9;
+    out[i] = 1.191027e-16 / (wl ** 5 * (Math.exp(0.0143876 / (wl * cct)) - 1));
+  }
+  return out;
+}
+
+function spdOfD(cct) {
+  const xlo = -4.607e9 / cct ** 3 + 2.9678e6 / cct ** 2 + 0.09911e3 / cct + 0.244063;
+  const xhi = 2.0064e9 / cct ** 3 + 1.9018e6 / cct ** 2 + 0.24748e3 / cct + 0.23704;
+  const xd = cct < 7000 ? xlo : xhi;
+  const yd = -3 * xd ** 2 + 2.87 * xd - 0.275;
+  const m1 = (-1.3515 - 1.7703 * xd + 5.9114 * yd) / (0.0241 + 0.2562 * xd - 0.7341 * yd);
+  const m2 = (0.03 - 31.4424 * xd + 30.0717 * yd) / (0.0241 + 0.2562 * xd - 0.7341 * yd);
+  const out = new Array(N_WL);
+  for (let i = 0; i < N_WL; i++) out[i] = CIE_D_S[i * 3] + m1 * CIE_D_S[i * 3 + 1] + m2 * CIE_D_S[i * 3 + 2];
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// CRI - CIE 13.3-1995 test colour method (Ra + R1..R14)
+// ---------------------------------------------------------------------------
+
+function uvToCd(u, v) {
+  return [(4 - u - 10 * v) / v, (1.708 * v + 0.404 - 1.481 * u) / v];
+}
+
+function tcsXyz(spd, sample) {
+  let xs = 0;
+  let ys = 0;
+  let zs = 0;
+  let yIllum = 0;
+  for (let i = 0; i < spd.length; i++) {
+    xs += spd[i] * sample[i] * CMF_1931_2DEG[i * 3];
+    ys += spd[i] * sample[i] * CMF_1931_2DEG[i * 3 + 1];
+    zs += spd[i] * sample[i] * CMF_1931_2DEG[i * 3 + 2];
+    yIllum += spd[i] * CMF_1931_2DEG[i * 3 + 1];
+  }
+  return [(100 * xs) / yIllum, (100 * ys) / yIllum, (100 * zs) / yIllum];
+}
+
+/** CRI of a test SPD (81 values at 5 nm) against Planck (<5000 K) or D-illuminant. */
+function calcCri(cct, testSpd) {
+  const ref = normalizeSpd(cct < 5000 ? spdOfPlanck(cct) : spdOfD(cct));
+  const refXYZ = spdToXyz(ref);
+  const [rx, ry] = xyzToXy(refXYZ[0], refXYZ[1], refXYZ[2]);
+  const [ru, rv] = xyToUv(rx, ry);
+  const [cr, dr] = uvToCd(ru, rv);
+  const refUVW = TCS.map((s) => xyzToUvw(tcsXyz(ref, s), ru, rv));
+
+  const test = normalizeSpd(testSpd);
+  const testXYZ = spdToXyz(test);
+  const [tx, ty] = xyzToXy(testXYZ[0], testXYZ[1], testXYZ[2]);
+  const [ut, vt] = xyToUv(tx, ty);
+  const [ct, dt] = uvToCd(ut, vt);
+  const uat = (10.872 + 0.404 * (cr / ct) * ct - 4 * (dr / dt) * dt) / (16.518 + 1.481 * (cr / ct) * ct - (dr / dt) * dt);
+  const vat = 5.52 / (16.518 + 1.481 * (cr / ct) * ct - (dr / dt) * dt);
+
+  const R = TCS.map((s, i) => {
+    const XYZ = tcsXyz(test, s);
+    const [x, y] = xyzToXy(XYZ[0], XYZ[1], XYZ[2]);
+    const [u, v] = xyToUv(x, y);
+    const [cs, ds] = uvToCd(u, v);
+    const uas = (10.872 + 0.404 * (cr / ct) * cs - 4 * (dr / dt) * ds) / (16.518 + 1.481 * (cr / ct) * cs - (dr / dt) * ds);
+    const vas = 5.52 / (16.518 + 1.481 * (cr / ct) * cs - (dr / dt) * ds);
+    const W = 25 * Math.cbrt(XYZ[1]) - 17;
+    const U = 13 * W * (uas - uat);
+    const V = 13 * W * (vas - vat);
+    const [Ur, Vr, Wr] = refUVW[i];
+    const de = Math.sqrt((Ur - U) ** 2 + (Vr - V) ** 2 + (Wr - W) ** 2);
+    return 100 - 4.6 * de;
+  });
+  const Ra = R.slice(0, 8).reduce((a, b) => a + b, 0) / 8;
+  return { Ra, R };
+}
+
+// ---------------------------------------------------------------------------
+// Battery (Li-ion pack mV -> %), shared by LM3 and newer-firmware LM4
+// ---------------------------------------------------------------------------
+
+const BAT_MV = [4080, 3985, 3894, 3838, 3773, 3725, 3710, 3688, 3656, 3594, 3455];
+const BAT_PCT = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 1];
+
+function batteryFromMv(mv) {
+  let level = 1;
+  for (let i = 0; i < 9; i++) {
+    if (mv > BAT_MV[i + 1]) {
+      level = ((mv - BAT_MV[i + 1]) / (BAT_MV[i] - BAT_MV[i + 1])) * (BAT_PCT[i] - BAT_PCT[i + 1]) + BAT_PCT[i + 1];
+      break;
+    }
+  }
+  return Math.min(level, 100);
+}
+
+// ---------------------------------------------------------------------------
+// Display helpers
+// ---------------------------------------------------------------------------
+
+/** Approximate sRGB of a blackbody at `kelvin` (Tanner Helland fit), as a CSS colour. */
+function cctToCss(kelvin) {
+  const k = Math.min(12000, Math.max(1200, kelvin)) / 100;
+  let r;
+  let g;
+  let b;
+  if (k <= 66) {
+    r = 255;
+    g = 99.4708025861 * Math.log(k) - 161.1195681661;
+    b = k <= 19 ? 0 : 138.5177312231 * Math.log(k - 10) - 305.0447927307;
+  } else {
+    r = 329.698727446 * (k - 60) ** -0.1332047592;
+    g = 288.1221695283 * (k - 60) ** -0.0755148492;
+    b = 255;
+  }
+  const c = (v) => Math.round(Math.min(255, Math.max(0, v)));
+  return `rgb(${c(r)}, ${c(g)}, ${c(b)})`;
+}
+
+/** Approximate sRGB of a visible wavelength (nm) for spectrum bars. */
+function wavelengthToCss(nm) {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (nm >= 380 && nm < 440) {
+    r = -(nm - 440) / 60;
+    b = 1;
+  } else if (nm < 490) {
+    g = (nm - 440) / 50;
+    b = 1;
+  } else if (nm < 510) {
+    g = 1;
+    b = -(nm - 510) / 20;
+  } else if (nm < 580) {
+    r = (nm - 510) / 70;
+    g = 1;
+  } else if (nm < 645) {
+    r = 1;
+    g = -(nm - 645) / 65;
+  } else if (nm <= 780) {
+    r = 1;
+  }
+  let f = 1;
+  if (nm < 420) f = 0.3 + (0.7 * (nm - 380)) / 40;
+  else if (nm > 700) f = 0.3 + (0.7 * (780 - nm)) / 80;
+  const c = (v) => Math.round(255 * (v * f) ** 0.8);
+  return `rgb(${c(r)}, ${c(g)}, ${c(b)})`;
+}
+
+// ---- src/protocol.js ----
+// Opple Light Master 3 / 4 - BLE transport framing and payload parsing.
+//
+// Both meters expose a Nordic UART Service. Commands are an 11-byte header
+// (+ optional body) wrapped in a small fragmentation layer; responses come
+// back as notifications in the same framing. The Opple app writes commands
+// to the *notify* characteristic (6e400003) - the meter accepts that, and
+// it is what every working implementation does.
+//
+// Protocol facts: OlliV/open-light-master (LM3), gabrielebaudo/opple-bridge
+// (LM4 layouts, from the decompiled Opple app), Geomaniac15/tag-tester.
+
+const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // host -> device (unused by Opple)
+const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // device -> host, also accepts writes
+
+const OPCODE = {
+  REQ_MEAS: 0x0a00, // 2560 single measurement
+  RES_MEAS: 0x0a01, // 2561
+  REQ_CAL: 0x0a04, //  2564 read per-unit sensor calibration (kSensor)
+  RES_CAL: 0x0a05, //  2565
+  REQ_FREQ: 0x0a0a, // 2570 flicker waveform (not used here)
+  RES_FREQ: 0x0a0b, // 2571
+};
+
+const FRAG_SINGLE = 0x00;
+const FRAG_FIRST = 0x80;
+const FRAG_MIDDLE = 0xa0;
+const FRAG_LAST = 0xc0;
+const FRAG_MASK = 0xe0;
+
+const HEADER_LEN = 11;
+
+/** Build the inner message: 11-byte header followed by the body. */
+function buildCommand(opcode, seq, body = new Uint8Array(0)) {
+  const out = new Uint8Array(HEADER_LEN + body.length);
+  out.set([0x00, 0x13, 0x00, 0x00, seq & 0xff, 0x00, body.length & 0xff, 0x00, 0x00, (opcode >> 8) & 0xff, opcode & 0xff]);
+  out.set(body, HEADER_LEN);
+  return out;
+}
+
+/** Split an inner message into BLE write fragments (first carries 17 bytes, the rest 19). */
+function encapsulate(data) {
+  const n = data.length < 17 ? 1 : Math.ceil((data.length - 17) / 19) + 1;
+  const frames = [];
+  for (let c = 0; c < n; c++) {
+    let head;
+    let body;
+    if (c === 0) {
+      const total = data.length + n + 2;
+      head = [n > 1 ? FRAG_FIRST : FRAG_SINGLE, (total >> 8) & 0xff, total & 0xff];
+      body = n > 1 ? data.subarray(0, 17) : data;
+    } else if (c !== n - 1) {
+      head = [FRAG_MIDDLE | c];
+      body = data.subarray(17 + 19 * (c - 1), 17 + 19 * c);
+    } else {
+      head = [FRAG_LAST | c];
+      body = data.subarray(17 + 19 * (c - 1));
+    }
+    const frame = new Uint8Array(head.length + body.length);
+    frame.set(head);
+    frame.set(body, head.length);
+    frames.push(frame);
+  }
+  return frames;
+}
+
+/** Reassembles fragmented notifications. feed() returns a complete inner message or null. */
+class MessageAssembler {
+  constructor() {
+    this.buffer = null;
+  }
+
+  reset() {
+    this.buffer = null;
+  }
+
+  feed(frame) {
+    if (!frame || frame.length === 0) return null;
+    const type = frame[0] & FRAG_MASK;
+    if (type === FRAG_SINGLE) {
+      this.buffer = null;
+      return frame.slice(3);
+    }
+    if (type === FRAG_FIRST) {
+      this.buffer = Array.from(frame.subarray(3));
+      return null;
+    }
+    if (type === FRAG_MIDDLE) {
+      if (this.buffer) this.buffer.push(...frame.subarray(1));
+      return null;
+    }
+    if (type === FRAG_LAST) {
+      if (!this.buffer) return null;
+      this.buffer.push(...frame.subarray(1));
+      const msg = Uint8Array.from(this.buffer);
+      this.buffer = null;
+      return msg;
+    }
+    return null;
+  }
+}
+
+function opcodeOf(msg) {
+  if (!msg || msg.length < HEADER_LEN) return 0;
+  return (msg[9] << 8) | msg[10];
+}
+
+const u16be = (b, i) => (b[i] << 8) | b[i + 1];
+
+/**
+ * Parse a RES_MEAS message. Model is detected from the payload length:
+ *   LM3: [0]=skip, [1..12]=6 x u16 BE (450/500/550/570/600/650 nm), [13..14]=battery mV, [15]=temperature
+ *   LM4: [0]=skip, [1..18]=9 x u16 BE (AS7341 F1..F8 + clear), [19..20]=padding, [21..22]=battery raw
+ */
+function parseMeasurement(msg) {
+  if (!msg || msg.length < HEADER_LEN + 16) return null;
+  const p = msg.subarray(HEADER_LEN);
+  if (p.length >= 23) {
+    const raw = [];
+    for (let i = 0; i < 9; i++) raw.push(u16be(p, 1 + 2 * i));
+    return { model: 'lm4', raw, batteryRaw: u16be(p, 21), temperature: null };
+  }
+  const raw = [];
+  for (let i = 0; i < 6; i++) raw.push(u16be(p, 1 + 2 * i));
+  return { model: 'lm3', raw, batteryRaw: u16be(p, 13), temperature: p[15] };
+}
+
+/**
+ * Parse a RES_CAL message: float32 little-endian factors starting at payload[1]
+ * (7 for the LM3 - six channels plus the constant C1 input; 9 for the LM4).
+ */
+function parseCalibration(msg) {
+  if (!msg || msg.length < HEADER_LEN + 29) return null;
+  const p = msg.subarray(HEADER_LEN);
+  const count = p.length >= 37 ? 9 : 7;
+  const view = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  const kSensor = [];
+  for (let i = 0; i < count; i++) {
+    const v = view.getFloat32(1 + 4 * i, true);
+    kSensor.push(Number.isFinite(v) ? v : 1);
+  }
+  return { model: count === 9 ? 'lm4' : 'lm3', kSensor };
+}
+
+// ---- src/lm3.js ----
+// Opple Light Master 3 - six-band sensor (450/500/550/570/600/650 nm).
+//
+// Raw counts are multiplied by the unit's kSensor calibration (read over
+// BLE), classified by source type, and mapped to XYZ with Opple's 3x7
+// tristimulus matrices (protocol facts via OlliV/open-light-master). Y is
+// illuminance in lux directly.
+
+
+const LM3_WAVELENGTHS = [450, 500, 550, 570, 600, 650];
+const LM3_BAND_LABELS = ['V', 'B', 'G', 'Y', 'O', 'R'];
+
+const MODE_MONO = 1;
+const MODE_INCANDESCENT = 2;
+const MODE_GENERAL = 3;
+const LM3_MODE_NAMES = { 1: 'monochromatic', 2: 'incandescent', 3: 'general' };
+
+const MATRICES = [
+  [
+    [0.06023, 0.00106, 0.02108, 0.03673, 0.1683, 0.02001, 0.0],
+    [0.00652, 0.04478, 0.16998, -0.03268, 0.07425, 0.00739, 0.0],
+    [0.33092, 0.12936, -0.15809, 0.19889, -0.0156, 0.00296, 0.0],
+  ],
+  [
+    [-0.43786, 0.53102, -0.1453, 0.2316, 0.36758, -0.09047, 0.0],
+    [-0.23226, 0.69225, -0.39786, 0.22539, 0.47947, -0.17614, 0.0],
+    [-0.11002, 1.21259, -0.56003, 0.14487, 0.35074, -0.30248, 0.0],
+  ],
+  [
+    [-0.05825, -0.0896, 0.25859, 0.19518, 0.10893, 0.06724, 0.0],
+    [-0.19865, 0.01337, 0.40651, 0.29702, -0.06287, 0.03282, 0.0],
+    [0.58258, 0.11548, 0.21823, -0.00136, -0.10732, -0.00915, 0.0],
+  ],
+];
+
+function lm3LightMode(ch) {
+  const [V, B, G, Y, O, R] = ch;
+  const total = V + B + G + Y + O + R;
+  if (total <= 0) return MODE_GENERAL;
+  const a = (O + R) / total;
+  const b = (R - Y) / total;
+  if (Math.max(V, B, G, Y, O, R) / total >= 0.45) return MODE_MONO;
+  if (a >= 0.5 && a <= 0.55 && b >= 0 && b <= 0.05) return MODE_INCANDESCENT;
+  return MODE_GENERAL;
+}
+
+function lm3ChannelsToXyz(ch, c1, mode) {
+  const m = MATRICES[mode - 1];
+  const vec = [ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], c1];
+  const dot = (row) => Math.max(0, row.reduce((acc, w, k) => acc + w * vec[k], 0));
+  return [dot(m[0]), dot(m[1]), dot(m[2])];
+}
+
+/** Equivalent melanopic lux estimate (Opple's LM3 fit). */
+function lm3Eml(cct, ch, mode) {
+  const [v, b, g, y, o, r] = ch;
+  let eml;
+  if (cct < 4e3) {
+    if (cct < 3e3 && mode === MODE_INCANDESCENT) {
+      eml = -11.1321 * v + 10.088 * b + 10.5399 * g - 4.9714 * y - 4.2457 * o + 1.3921 * r;
+    } else {
+      eml = 0.1157 * v + 0.543 * b + 0.1886 * g + 0.02516 * y - 0.0825 * o - 0.007316 * r;
+    }
+  } else {
+    eml = -0.005224 * v + 0.3113 * b + 0.3649 * g + 0.3632 * y - 0.4313 * o + 0.05123 * r;
+  }
+  return Math.max(0, eml);
+}
+
+/**
+ * Full LM3 pipeline from calibrated channels (raw x kSensor[0..5]) and the
+ * constant input c1 (= kSensor[6]).
+ */
+function lm3Process(channels, c1) {
+  const mode = lm3LightMode(channels);
+  const [X, Y, Z] = lm3ChannelsToXyz(channels, c1, mode);
+  let [x, y] = xyzToXy(X, Y, Z);
+  let u = 0;
+  let v = 0;
+  if (x !== 0 || y !== 0) [u, v] = xyToUv(x, y);
+  if (X === 0 && Y === 0 && Z === 0) {
+    x = 0;
+    y = 0;
+  }
+  const lux = Y;
+  const cct = cctFromXy(x, y);
+  const duv = duvFromUv(u, v);
+  const { tint } = tintFromXy(x, y);
+  const spd = interpolateSpd(LM3_WAVELENGTHS, channels);
+  let cri = null;
+  let eml = null;
+  if (lux > 0 && Number.isFinite(cct)) {
+    cri = calcCri(cct, spd);
+    eml = lm3Eml(cct, channels, mode);
+  }
+  return {
+    model: 'lm3',
+    x,
+    y,
+    u,
+    v,
+    lux,
+    cct,
+    duv,
+    tint,
+    mode,
+    modeName: LM3_MODE_NAMES[mode],
+    Ra: cri ? cri.Ra : null,
+    R: cri ? cri.R : null,
+    criSource: cri ? 'spline' : null,
+    eml,
+    cs: null,
+    spd,
+    bands: channels.slice(),
+    bandWavelengths: LM3_WAVELENGTHS,
+  };
+}
+
+/** Apply the unit calibration to a raw LM3 measurement. */
+function lm3Calibrate(raw, kSensor) {
+  const channels = raw.slice(0, 6).map((r, i) => r * kSensor[i]);
+  return { channels, c1: 1 * kSensor[6] };
+}
+
+function lm3Battery(batteryRaw) {
+  return { mv: batteryRaw, percent: batteryFromMv(batteryRaw) };
+}
+
+// ---- src/lm4.js ----
+// Opple Light Master 4 - AS7341 spectral sensor (F1..F8 + clear).
+//
+// The LM4 does not use the LM3's mode-switched matrices. The official Opple
+// app (v3.15.0, coefficient set LightmasterIVCoeff_20231115) maps the eight
+// kSensor-calibrated spectral channels to XYZ with a single 3x8 matrix, and
+// derives CRI (R1..R14, Ra), EML and circadian stimulus from a degree-3
+// polynomial model on a transformed, normalised channel vector. Both were
+// extracted from the app by gabrielebaudo/opple-bridge (MIT) and validated
+// against app screenshots (see test/colour.test.js).
+
+
+
+const LM4_WAVELENGTHS = [415, 445, 480, 515, 555, 590, 630, 680];
+const LM4_BAND_LABELS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'];
+
+const MATRIX_G4 = [
+  [-0.873112331303128, 0.805269469275936, -0.14141487926448, 0.0341236934045446, 0.290053924131123, 0.681542877395036, 0.237949611300369, -0.0216220125618065],
+  [-0.892318403241807, 0.283584501574269, -0.142426509016336, 0.670437256572805, 0.619588489202499, 0.436347226426992, 0.0482937353635748, -0.00263886395266582],
+  [-1.60374782255152, 3.11179541056893, 0.945597350971534, -0.0788297890447575, 0.103830669638194, -0.0824849988110418, -0.0071035486372898, -0.0659551443269493],
+];
+
+const COEFF_MATRIX = [
+  [-0.158469, 0.20916, 0.112595, -0.330816, -0.108551, 0.156185, -0.031859, 0.301539],
+  [-1.419388, 1.96641, -0.37666, -0.063028, 0.217644, 0.157068, -0.238497, 0.307221],
+  [-1.144102, 1.352208, 0.414882, -0.239411, 0.052844, 0.412882, -0.596718, 0.684658],
+  [-0.225311, 0.175267, -0.304776, 0.874862, 0.0965, 0.106016, -0.168342, 0.396309],
+  [0.254739, -0.063965, 0.223948, -0.295055, 0.721228, -0.009727, 0.196025, 0.190601],
+  [0.136996, 0.654563, 0.171631, -0.856572, -0.895806, 1.215222, 0.257699, 0.303073],
+  [-0.208297, 1.65795, 0.693002, -2.181311, -2.197116, 1.38897, 1.202967, 0.4825],
+  [0.038598, 0.814068, 0.59312, -1.397442, -1.28491, 0.886942, 0.06491, 0.989551],
+];
+
+const LED_MIN = [0.05181869, 0.01784572, 0.04740712, 0.04553685, 0.25051674, 0.28267713, 0.17828663, 0.03560036];
+const LED_MAX = [0.32746889, 0.73256163, 0.59506801, 0.65308541, 0.72466856, 0.65386043, 0.87034288, 0.54106279];
+const AB_MIN = [0.08172532, 0.10375636, 0.07822125, 0.15535571, 0.26380078, 0.29673346, 0.26490609, 0.03563745];
+const AB_MAX = [0.12244247, 0.51499119, 0.33630407, 0.40782491, 0.5581059, 0.58960656, 0.68683068, 0.56185695];
+const EML_MIN = [0.08177328, 0.10373766, 0.07822311, 0.15534812, 0.26378332, 0.2967478, 0.29495997, 0.036428];
+const EML_MAX = [0.12246987, 0.46526904, 0.31737552, 0.40371817, 0.5580768, 0.58961628, 0.68682864, 0.56187936];
+
+function lm4ChannelsToXyz(ch) {
+  const vec = ch.slice(0, 8);
+  const dot = (row) => Math.max(0, row.reduce((acc, w, k) => acc + w * vec[k], 0));
+  return [dot(MATRIX_G4[0]), dot(MATRIX_G4[1]), dot(MATRIX_G4[2])];
+}
+
+function l2(vec) {
+  const n = Math.sqrt(vec.reduce((a, v) => a + v * v, 0));
+  return n === 0 ? vec.slice() : vec.map((v) => v / n);
+}
+
+function minMax(vec, lo, hi) {
+  return vec.map((v, i) => (hi[i] !== lo[i] ? (v - lo[i]) / (hi[i] - lo[i]) : 0));
+}
+
+function polyFeatures(vec) {
+  const out = new Array(LM4_POWERS.length);
+  for (let t = 0; t < LM4_POWERS.length; t++) {
+    const p = LM4_POWERS[t];
+    let val = 1;
+    for (let i = 0; i < 8; i++) if (p[i] !== 0) val *= vec[i] ** p[i];
+    out[t] = val;
+  }
+  return out;
+}
+
+function evaluate(features, key) {
+  const { bias, coef } = LM4_POLY[key];
+  let r = bias;
+  for (let i = 1; i < coef.length; i++) r += coef[i] * features[i];
+  return r;
+}
+
+/**
+ * Opple's LM4 polynomial model: CRI R1..R14 + Ra, melanopic ratio, and the
+ * circadian-stimulus coefficients. Returns null when the spectrum falls
+ * outside the model's domain (a transformed component <= 0), as the app does.
+ */
+function lm4Predict(channels8, cct, lux) {
+  if (channels8.length < 8) return null;
+  const unit = l2(channels8.slice(0, 8));
+  const transformed = COEFF_MATRIX.map((row) => row.reduce((acc, w, k) => acc + w * unit[k], 0));
+  if (transformed.some((v) => v <= 0)) return null;
+  const base = l2(transformed);
+
+  const ledFeatures = polyFeatures(minMax(base, LED_MIN, LED_MAX));
+  const R = [];
+  for (let i = 1; i <= 14; i++) R.push(Math.min(evaluate(ledFeatures, `R${i}`), 100));
+  const Ra = Math.min(evaluate(ledFeatures, 'Ra'), 100);
+
+  const emlPoly = evaluate(polyFeatures(minMax(base, EML_MIN, EML_MAX)), 'EML');
+  const emlRatio = emlPoly > 0 && emlPoly < 1 ? emlPoly : 0.00023846153846153847 * cct - 0.6438461538461538 + 0.45;
+  const eml = Math.max(0, emlRatio * lux);
+
+  const abFeatures = polyFeatures(minMax(base, AB_MIN, AB_MAX));
+  const a = evaluate(abFeatures, 'A');
+  const b = evaluate(abFeatures, 'B');
+  return { Ra, R, eml, a, b };
+}
+
+/** Circadian stimulus (Rea et al. form used by the Opple app) from the model's a, b and lux. */
+function lm4CircadianStimulus(a, b, lux) {
+  const k = lux / 1000;
+  const val = a * k * k + b * k;
+  if (val < 0) return 0;
+  return 0.7 - 0.7 / (1 + (val / 355.7) ** 1.1026);
+}
+
+/** Full LM4 pipeline from the nine kSensor-calibrated channels. */
+function lm4Process(channels) {
+  const [X, Y, Z] = lm4ChannelsToXyz(channels);
+  let [x, y] = xyzToXy(X, Y, Z);
+  let u = 0;
+  let v = 0;
+  if (x !== 0 || y !== 0) [u, v] = xyToUv(x, y);
+  if (X === 0 && Y === 0 && Z === 0) {
+    x = 0;
+    y = 0;
+  }
+  const lux = Y;
+  const cct = cctFromXy(x, y);
+  const duv = duvFromUv(u, v);
+  const { tint } = tintFromXy(x, y);
+  const spd = interpolateSpd(LM4_WAVELENGTHS, channels.slice(0, 8));
+
+  let Ra = null;
+  let R = null;
+  let eml = null;
+  let cs = null;
+  let criSource = null;
+  if (lux > 0 && Number.isFinite(cct)) {
+    const model = lm4Predict(channels, cct, lux);
+    if (model) {
+      ({ Ra, R, eml } = model);
+      cs = lm4CircadianStimulus(model.a, model.b, lux);
+      criSource = 'opple-model';
+    } else {
+      // Outside the app's model domain: fall back to a spline SPD through the eight bands.
+      const cri = calcCri(cct, spd);
+      Ra = cri.Ra;
+      R = cri.R;
+      criSource = 'spline';
+    }
+  }
+  return {
+    model: 'lm4',
+    x,
+    y,
+    u,
+    v,
+    lux,
+    cct,
+    duv,
+    tint,
+    mode: null,
+    modeName: null,
+    Ra,
+    R,
+    criSource,
+    eml,
+    cs,
+    spd,
+    bands: channels.slice(0, 8),
+    clear: channels[8],
+    bandWavelengths: LM4_WAVELENGTHS,
+  };
+}
+
+function lm4Calibrate(raw, kSensor) {
+  return { channels: raw.slice(0, 9).map((r, i) => r * (kSensor[i] ?? 1)) };
+}
+
+// Battery: the app picks one of two tables by firmware version. Older units
+// report a direct ADC reading (~3000-3300); newer ones report quarter-mV.
+const OLD_TABLE = [3297, 3270, 3243, 3216, 3189, 3162, 3135, 3108, 3081, 3054, 3027];
+const PCT = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 1];
+
+function lm4Battery(batteryRaw) {
+  if (!batteryRaw || batteryRaw <= 0) return { mv: null, percent: null };
+  if (batteryRaw < 2000) {
+    const mv = batteryRaw * 4;
+    return { mv, percent: batteryFromMv(mv) };
+  }
+  const t = OLD_TABLE;
+  if (batteryRaw > t[0]) return { mv: null, percent: 100 };
+  if (batteryRaw <= t[t.length - 1]) return { mv: null, percent: 1 };
+  for (let i = 0; i < t.length - 1; i++) {
+    if (t[i] >= batteryRaw && batteryRaw > t[i + 1]) {
+      const frac = (batteryRaw - t[i + 1]) / (t[i] - t[i + 1]);
+      return { mv: null, percent: PCT[i + 1] + frac * (PCT[i] - PCT[i + 1]) };
+    }
+  }
+  return { mv: null, percent: null };
+}
+
+// ---- src/meter.js ----
+// Web Bluetooth session with an Opple Light Master 3 or 4.
+//
+// Usage:
+//   const meter = new OppleMeter();
+//   meter.addEventListener('reading', (e) => console.log(e.detail));
+//   await meter.connect();      // must be called from a user gesture
+//   meter.startPolling(500);
+//
+// Events: 'status' {state, message}, 'reading' (processed measurement),
+// 'battery' {percent, mv}, 'disconnected'.
+
+
+
+
+const REQUEST_OPTIONS = {
+  filters: [
+    { services: [NUS_SERVICE] },
+    { namePrefix: 'SigMesh' }, // Light Master 4 advertises as "SigMesh"
+    { namePrefix: 'Opple' },
+    { namePrefix: 'LMaster' },
+    { namePrefix: 'Light Master' },
+  ],
+  optionalServices: [NUS_SERVICE, 'battery_service'],
+};
+
+function bluetoothSupport() {
+  if (typeof navigator === 'undefined' || !navigator.bluetooth) {
+    return { ok: false, reason: 'no-api' };
+  }
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    return { ok: false, reason: 'insecure' };
+  }
+  return { ok: true };
+}
+
+/** Turn a raw measurement + calibration into the full processed reading. */
+function processMeasurement(meas, cal) {
+  const kSensor = cal && cal.kSensor ? cal.kSensor : null;
+  if (meas.model === 'lm4') {
+    const { channels } = lm4Calibrate(meas.raw, kSensor || new Array(9).fill(1));
+    const reading = lm4Process(channels);
+    return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, battery: lm4Battery(meas.batteryRaw), temperature: null, ts: Date.now() };
+  }
+  const { channels, c1 } = lm3Calibrate(meas.raw, kSensor || new Array(7).fill(1));
+  const reading = lm3Process(channels, c1);
+  return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, battery: lm3Battery(meas.batteryRaw), temperature: meas.temperature, ts: Date.now() };
+}
+
+class OppleMeter extends EventTarget {
+  constructor() {
+    super();
+    this.device = null;
+    this.server = null;
+    this.writeChar = null;
+    this.notifyChar = null;
+    this.seq = 0;
+    this.assembler = new MessageAssembler();
+    this.pending = null; // { opcode, resolve, reject, timer }
+    this.calibration = null;
+    this.model = null;
+    this.pollTimer = null;
+    this.pollInterval = 500;
+    this.inFlight = false;
+    this.manualDisconnect = false;
+    this.onNotify = this.onNotify.bind(this);
+    this.onGattDisconnected = this.onGattDisconnected.bind(this);
+  }
+
+  get connected() {
+    return !!(this.server && this.server.connected && this.writeChar);
+  }
+
+  emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+
+  status(state, message) {
+    this.emit('status', { state, message });
+  }
+
+  /** Prompt for a meter and open the session. Must run inside a user gesture. */
+  async connect() {
+    const support = bluetoothSupport();
+    if (!support.ok) throw new Error(support.reason === 'insecure' ? 'Web Bluetooth needs an https page' : 'This browser has no Web Bluetooth (use Chrome or Edge)');
+    this.status('requesting', 'Choose your Light Master in the browser dialog');
+    const device = await navigator.bluetooth.requestDevice(REQUEST_OPTIONS);
+    this.device = device;
+    this.manualDisconnect = false;
+    device.addEventListener('gattserverdisconnected', this.onGattDisconnected);
+    await this.openSession();
+    return this.info();
+  }
+
+  async openSession() {
+    const name = this.device.name || 'Light Master';
+    this.status('connecting', `Connecting to ${name}`);
+    this.server = await this.device.gatt.connect();
+    const service = await this.server.getPrimaryService(NUS_SERVICE);
+    const tx = await service.getCharacteristic(NUS_TX);
+    let rx = null;
+    try {
+      rx = await service.getCharacteristic(NUS_RX);
+    } catch (_) {
+      rx = null;
+    }
+    // Opple meters take commands on the notify characteristic; fall back to classic NUS RX.
+    if (tx.properties.write || tx.properties.writeWithoutResponse) this.writeChar = tx;
+    else if (rx) this.writeChar = rx;
+    else throw new Error('No writable characteristic on this device');
+    this.notifyChar = tx;
+    this.assembler.reset();
+    tx.addEventListener('characteristicvaluechanged', this.onNotify);
+    await tx.startNotifications();
+
+    this.status('calibrating', 'Reading sensor calibration');
+    this.calibration = await this.readCalibration();
+    if (this.calibration) this.model = this.calibration.model;
+    // A first measurement settles the model detection (the payload length is authoritative).
+    const first = await this.measureRaw(4000);
+    this.model = first.model;
+    if (this.calibration && this.calibration.model !== first.model) {
+      // Mismatched calibration length - trust the measurement and truncate/pad.
+      const need = first.model === 'lm4' ? 9 : 7;
+      const k = this.calibration.kSensor.slice(0, need);
+      while (k.length < need) k.push(1);
+      this.calibration = { model: first.model, kSensor: k };
+    }
+    this.status('connected', `${this.modelName()} connected`);
+    this.emit('reading', processMeasurement(first, this.calibration));
+  }
+
+  modelName() {
+    return this.model === 'lm4' ? 'Light Master 4' : this.model === 'lm3' ? 'Light Master 3' : 'Light Master';
+  }
+
+  info() {
+    return {
+      name: this.device ? this.device.name : null,
+      model: this.model,
+      modelName: this.modelName(),
+      kSensor: this.calibration ? this.calibration.kSensor : null,
+    };
+  }
+
+  async readCalibration() {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const msg = await this.command(OPCODE.REQ_CAL, OPCODE.RES_CAL, 3000);
+        const cal = parseCalibration(msg);
+        if (cal) return cal;
+      } catch (_) {
+        // retry once
+      }
+    }
+    return null;
+  }
+
+  async measureRaw(timeout = 3000) {
+    const msg = await this.command(OPCODE.REQ_MEAS, OPCODE.RES_MEAS, timeout);
+    const meas = parseMeasurement(msg);
+    if (!meas) throw new Error('Unparseable measurement');
+    return meas;
+  }
+
+  /** One calibrated, processed reading. */
+  async measure(timeout = 3000) {
+    const meas = await this.measureRaw(timeout);
+    return processMeasurement(meas, this.calibration);
+  }
+
+  command(opcode, responseOpcode, timeout = 3000, body = new Uint8Array(0)) {
+    if (!this.connected) return Promise.reject(new Error('Not connected'));
+    if (this.pending) return Promise.reject(new Error('Command already in flight'));
+    this.seq = (this.seq + 1) & 0xff;
+    const frames = encapsulate(buildCommand(opcode, this.seq, body));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending = null;
+        reject(new Error('Meter did not answer (is it awake?)'));
+      }, timeout);
+      this.pending = { opcode: responseOpcode, resolve, reject, timer };
+      this.writeFrames(frames).catch((err) => {
+        clearTimeout(timer);
+        this.pending = null;
+        reject(err);
+      });
+    });
+  }
+
+  async writeFrames(frames) {
+    for (const f of frames) {
+      if (this.writeChar.properties.writeWithoutResponse) await this.writeChar.writeValueWithoutResponse(f);
+      else await this.writeChar.writeValue(f);
+    }
+  }
+
+  onNotify(event) {
+    const dv = event.target.value;
+    const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    const msg = this.assembler.feed(bytes);
+    if (!msg) return;
+    const code = opcodeOf(msg);
+    if (this.pending && code === this.pending.opcode) {
+      const p = this.pending;
+      this.pending = null;
+      clearTimeout(p.timer);
+      p.resolve(msg);
+    }
+    // Unsolicited frames (opcode 0 heartbeats etc.) are ignored.
+  }
+
+  startPolling(intervalMs = 500) {
+    this.pollInterval = intervalMs;
+    this.stopPolling();
+    const tick = async () => {
+      if (!this.connected) return;
+      if (!this.inFlight) {
+        this.inFlight = true;
+        try {
+          const reading = await this.measure(3000);
+          this.emit('reading', reading);
+        } catch (err) {
+          this.status('warning', err.message);
+        } finally {
+          this.inFlight = false;
+        }
+      }
+      this.pollTimer = setTimeout(tick, this.pollInterval);
+    };
+    this.pollTimer = setTimeout(tick, 0);
+  }
+
+  stopPolling() {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  async onGattDisconnected() {
+    this.stopPolling();
+    if (this.pending) {
+      clearTimeout(this.pending.timer);
+      this.pending.reject(new Error('Disconnected'));
+      this.pending = null;
+    }
+    this.writeChar = null;
+    if (this.manualDisconnect) {
+      this.status('disconnected', 'Disconnected');
+      this.emit('disconnected', {});
+      return;
+    }
+    // Try to come back (the meter drops the link when it sleeps).
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      this.status('reconnecting', `Link lost - reconnecting (${attempt}/3)`);
+      try {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+        await this.openSession();
+        this.startPolling(this.pollInterval);
+        return;
+      } catch (_) {
+        // keep trying
+      }
+    }
+    this.status('disconnected', 'Meter disconnected - press its button to wake it, then connect again');
+    this.emit('disconnected', {});
+  }
+
+  disconnect() {
+    this.manualDisconnect = true;
+    this.stopPolling();
+    if (this.notifyChar) {
+      try {
+        this.notifyChar.removeEventListener('characteristicvaluechanged', this.onNotify);
+      } catch (_) {
+        // ignore
+      }
+    }
+    if (this.device && this.device.gatt && this.device.gatt.connected) this.device.gatt.disconnect();
+    else this.onGattDisconnected();
+  }
+}
+
+// ---- src/app.js ----
+// Sunday Light Meter - page controller.
+//
+// Mounts into a root element, talks to an Opple Light Master over Web
+// Bluetooth (see meter.js) and renders the live readout plus the "check
+// your Sunday light" calibration workflow.
+
+
+
+
+const STORAGE = { checks: 'slm.checks.v1', gen: 'slm.gen.v1', ambient: 'slm.ambient.v1' };
+const CAPTURE_SAMPLES = 8;
+const LIVE_SMOOTHING = 3;
+const TOLERANCE_GOOD = 60;
+const TOLERANCE_OK = 150;
+const MIN_CHECK_LUX = 30;
+
+// Physical limits of the two LED dies fitted to Sunday lights. Commanded
+// colour temperatures beyond the dies are clamped by the light, so the
+// expected reading is the clamped value, not the number on the slider.
+const LED_GENERATIONS = {
+  unknown: { label: "Don't know", warm: null, cool: null, hint: 'Measure your light at its warmest and coolest settings: those two readings are its die limits.' },
+  genA: { label: 'Earlier lights (built up to Feb 2025)', warm: 2720, cool: 6900, hint: 'Warm die ~2720 K, cool die ~6900 K.' },
+  genB: { label: 'Later lights (built from Apr 2025)', warm: 2820, cool: 7930, hint: 'Warm die ~2820 K, cool die ~7930 K.' },
+};
+
+const store = {
+  get(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? fallback : JSON.parse(v);
+    } catch (_) {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (_) {
+      // private mode etc. - the page still works without persistence
+    }
+  },
+};
+
+const fmt = {
+  int: (v) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : Math.round(v).toLocaleString('en-GB')),
+  fixed: (v, d = 1) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : v.toFixed(d)),
+  signed: (v, d = 0) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : `${v > 0 ? '+' : ''}${v.toFixed(d)}`),
+  lux: (v) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : v >= 100 ? Math.round(v).toLocaleString('en-GB') : v.toFixed(1)),
+  time: (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+};
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// ---------------------------------------------------------------------------
+// Simulated meter for browsers without Web Bluetooth / demos
+// ---------------------------------------------------------------------------
+
+const DEMO_K = [1.010141, 1.009422, 0.928753, 1.037585, 0.968898, 1.181077, 0.961893, 1.059147, 1.0];
+const DEMO_RAW = [654, 819, 855, 1152, 1330, 1719, 2595, 3715, 14571];
+const LM4_WL = [415, 445, 480, 515, 555, 590, 630, 680, 555];
+
+const demoTilt = (t) => DEMO_RAW.map((v, i) => v * (LM4_WL[i] / 555) ** t);
+
+/** Spectral tilt exponent that makes the LM4 pipeline read `targetK` from the demo spectrum. */
+function demoTiltFor(targetK) {
+  const cctOf = (t) => lm4Process(demoTilt(t).map((v, i) => v * DEMO_K[i])).cct;
+  // CCT falls monotonically with t over this range (~8000 K down to ~1800 K);
+  // stronger blue tilts push the matrix into negative XYZ and are not usable.
+  let lo = -1.8;
+  let hi = 8;
+  for (let i = 0; i < 26; i++) {
+    const mid = (lo + hi) / 2;
+    if (cctOf(mid) < targetK) hi = mid;
+    else lo = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+class SimulatedMeter extends EventTarget {
+  constructor() {
+    super();
+    this.model = 'lm4';
+    this.calibration = { model: 'lm4', kSensor: DEMO_K };
+    this.timer = null;
+    this.t0 = Date.now();
+    this.targetK = 3000;
+    this.level = 0.35;
+    this.tilt = demoTiltFor(3000);
+  }
+
+  get connected() {
+    return !!this.timer;
+  }
+
+  modelName() {
+    return 'Simulated Light Master 4';
+  }
+
+  emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+
+  async connect() {
+    this.emit('status', { state: 'connected', message: 'Simulated meter connected - readings are synthetic' });
+    return { name: 'Demo', model: 'lm4', modelName: this.modelName(), kSensor: DEMO_K };
+  }
+
+  setScene(k, level) {
+    if (k !== this.targetK) this.tilt = demoTiltFor(k);
+    this.targetK = k;
+    this.level = level;
+  }
+
+  startPolling(interval = 500) {
+    this.stopPolling();
+    const tick = () => {
+      const t = (Date.now() - this.t0) / 1000;
+      // Slow colour drift (a few kelvin) plus per-sample noise, like a real light.
+      const scale = this.level * (1 + 0.01 * Math.sin(t / 3));
+      const raw = demoTilt(this.tilt + 0.01 * Math.sin(t / 7)).map((v) => Math.max(0, Math.round(v * scale * (1 + (Math.random() - 0.5) * 0.01))));
+      this.emit('reading', processMeasurement({ model: 'lm4', raw, batteryRaw: 3300, temperature: null }, this.calibration));
+      this.timer = setTimeout(tick, interval);
+    };
+    this.timer = setTimeout(tick, 0);
+  }
+
+  stopPolling() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  disconnect() {
+    this.stopPolling();
+    this.emit('status', { state: 'disconnected', message: 'Disconnected' });
+    this.emit('disconnected', {});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Markup
+// ---------------------------------------------------------------------------
+
+function template() {
+  const genOptions = Object.entries(LED_GENERATIONS)
+    .map(([k, g]) => `<option value="${k}">${esc(g.label)}</option>`)
+    .join('');
+  return `
+<div class="slm__notice" data-el="support" hidden></div>
+
+<section class="slm__connect" aria-label="Meter connection">
+  <div class="slm__connect-left">
+    <button class="slm__btn slm__btn--primary" type="button" data-el="connect">Connect light meter</button>
+    <button class="slm__btn slm__btn--ghost" type="button" data-el="disconnect" hidden>Disconnect</button>
+    <button class="slm__btn slm__btn--link" type="button" data-el="demo">Try a simulated meter</button>
+  </div>
+  <div class="slm__status" data-el="status">
+    <span class="slm__dot" data-el="dot"></span>
+    <span data-el="status-text">Not connected</span>
+    <span class="slm__chip" data-el="model" hidden></span>
+    <span class="slm__chip" data-el="battery" hidden></span>
+    <span class="slm__chip slm__chip--warn" data-el="uncal" hidden title="The meter did not return its calibration factors - readings are raw">uncalibrated</span>
+  </div>
+</section>
+
+<section class="slm__live" aria-label="Live reading">
+  <div class="slm__sun-wrap">
+    <div class="slm__sun" data-el="sun"><span class="slm__sun-core"></span></div>
+  </div>
+  <div class="slm__hero">
+    <div class="slm__hero-value"><span data-el="cct">––––</span><span class="slm__hero-unit">K</span></div>
+    <div class="slm__hero-label">Colour temperature <span data-el="mode" class="slm__mode"></span></div>
+    <div class="slm__hero-sub"><b data-el="lux">–</b> lux &nbsp;·&nbsp; Duv <b data-el="duv">–</b> &nbsp;·&nbsp; tint <b data-el="tint">–</b></div>
+  </div>
+  <dl class="slm__metrics">
+    <div><dt>CRI Ra</dt><dd data-el="ra">–</dd></div>
+    <div><dt>R9 <small>deep red</small></dt><dd data-el="r9">–</dd></div>
+    <div><dt>Melanopic <small>EML</small></dt><dd data-el="eml">–</dd></div>
+    <div><dt>x, y</dt><dd data-el="xy" class="slm__small">–</dd></div>
+    <div data-el="cs-wrap"><dt>Circadian <small>CS</small></dt><dd data-el="cs">–</dd></div>
+    <div><dt>R1–R14</dt><dd data-el="rlist" class="slm__rlist">–</dd></div>
+  </dl>
+  <div class="slm__spectrum" data-el="spectrum" aria-label="Sensor bands"></div>
+</section>
+
+<section class="slm__check" aria-label="Check your Sunday light">
+  <header class="slm__check-head">
+    <h2>Check your Sunday light</h2>
+    <p>Set a colour temperature in the Sunday app, point the meter at the light from where you sit, and capture. The chart shows how close the light lands to what you asked for.</p>
+  </header>
+  <div class="slm__check-grid">
+    <form class="slm__form" data-el="form">
+      <label class="slm__field">
+        <span>Colour temperature set in the app</span>
+        <div class="slm__range">
+          <input type="range" min="2000" max="8000" step="50" value="3000" data-el="set-cct-range">
+          <output data-el="set-cct-out">3000 K</output>
+        </div>
+      </label>
+      <label class="slm__field">
+        <span>Brightness set in the app</span>
+        <div class="slm__range">
+          <input type="range" min="1" max="100" step="1" value="100" data-el="set-b-range">
+          <output data-el="set-b-out">100%</output>
+        </div>
+      </label>
+      <label class="slm__field">
+        <span>Which light do you have?</span>
+        <select data-el="gen">${genOptions}</select>
+        <small data-el="gen-hint"></small>
+      </label>
+      <div class="slm__actions">
+        <button class="slm__btn slm__btn--primary" type="submit" data-el="capture" disabled>Capture reading</button>
+        <button class="slm__btn slm__btn--ghost" type="button" data-el="ambient" disabled title="With the light off, record the room's ambient light so dim readings are flagged">Record ambient</button>
+      </div>
+      <p class="slm__ambient" data-el="ambient-text"></p>
+      <ul class="slm__tips">
+        <li>Dark room, curtains closed. Daylight skews the reading cool.</li>
+        <li>Hold the meter where the light lands - your desk or sofa - with the sensor facing the light.</li>
+        <li>Give the light 30 seconds to settle after changing the setting.</li>
+        <li>Within ±60 K is spot on; ±150 K is within normal tolerance for a two-die mix.</li>
+      </ul>
+    </form>
+    <div class="slm__chart-wrap">
+      <svg data-el="chart" viewBox="0 0 560 400" role="img" aria-label="Measured colour temperature versus the setting"></svg>
+      <div class="slm__legend">
+        <span><i class="slm__legend-line"></i> perfect match</span>
+        <span><i class="slm__legend-band"></i> ±150 K</span>
+        <span><i class="slm__legend-die"></i> die limits</span>
+        <span><i class="slm__legend-dot"></i> your readings</span>
+      </div>
+    </div>
+  </div>
+  <div class="slm__results" data-el="results" hidden>
+    <div class="slm__results-bar">
+      <span data-el="summary"></span>
+      <span class="slm__results-actions">
+        <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="export">Download CSV</button>
+        <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="clear">Clear</button>
+      </span>
+    </div>
+    <div class="slm__table-wrap">
+      <table class="slm__table">
+        <thead><tr><th>Set</th><th>Bright.</th><th>Measured</th><th>Δ</th><th>Verdict</th><th>Lux</th><th>Duv</th><th>Ra</th><th>R9</th><th>Time</th><th></th></tr></thead>
+        <tbody data-el="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer class="slm__foot">
+  <p>Works with the Opple Light Master 3 and 4 over Web Bluetooth in Chrome, Edge and other Chromium browsers (desktop and Android). On iPhone and iPad use the <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a> browser. Readings use each meter's own factory calibration and the same maths as the Opple app.</p>
+</footer>
+<div class="slm__toast" data-el="toast" hidden></div>
+`;
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+function mount(root) {
+  root.classList.add('slm');
+  root.innerHTML = template();
+  const el = (name) => root.querySelector(`[data-el="${name}"]`);
+  const els = {};
+  root.querySelectorAll('[data-el]').forEach((n) => {
+    els[n.dataset.el] = n;
+  });
+
+  const state = {
+    meter: null,
+    simulated: false,
+    live: null,
+    rawHistory: [],
+    capture: null, // { samples: [], resolve }
+    checks: store.get(STORAGE.checks, []),
+    gen: store.get(STORAGE.gen, 'unknown'),
+    ambient: store.get(STORAGE.ambient, null),
+  };
+
+  let toastTimer = null;
+  function toast(message, isError = false) {
+    els.toast.textContent = message;
+    els.toast.classList.toggle('slm__toast--error', isError);
+    els.toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      els.toast.hidden = true;
+    }, 4200);
+  }
+
+  // -- support banner -------------------------------------------------------
+  const support = bluetoothSupport();
+  if (!support.ok) {
+    els.support.hidden = false;
+    els.support.innerHTML =
+      support.reason === 'insecure'
+        ? 'Web Bluetooth only runs on secure (https) pages.'
+        : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad. You can still try the simulated meter below.';
+    els.connect.disabled = true;
+  }
+
+  // -- connection -----------------------------------------------------------
+  function setStatus(stateName, message) {
+    els['status-text'].textContent = message;
+    els.dot.className = `slm__dot slm__dot--${stateName}`;
+    const connected = stateName === 'connected';
+    els.connect.hidden = connected;
+    els.disconnect.hidden = !connected;
+    els.demo.hidden = connected;
+    els.capture.disabled = !connected;
+    els.ambient.disabled = !connected;
+    if (!connected) {
+      els.model.hidden = true;
+      els.battery.hidden = true;
+      els.uncal.hidden = true;
+    }
+  }
+
+  function attach(meter, simulated) {
+    state.meter = meter;
+    state.simulated = simulated;
+    state.rawHistory = [];
+    meter.addEventListener('status', (e) => {
+      setStatus(e.detail.state, e.detail.message);
+      if (e.detail.state === 'connected') {
+        els.model.textContent = meter.modelName();
+        els.model.hidden = false;
+        els.uncal.hidden = !!(meter.calibration && meter.calibration.kSensor);
+      }
+      if (e.detail.state === 'warning') toast(e.detail.message, true);
+    });
+    meter.addEventListener('reading', (e) => onReading(e.detail));
+    meter.addEventListener('disconnected', () => {
+      state.meter = null;
+      state.live = null;
+      renderLive(null);
+    });
+  }
+
+  async function connectReal() {
+    const meter = new OppleMeter();
+    attach(meter, false);
+    els.connect.disabled = true;
+    try {
+      await meter.connect();
+      meter.startPolling(500);
+      toast(`${meter.modelName()} connected${meter.calibration ? ' - calibration loaded' : ''}`);
+    } catch (err) {
+      state.meter = null;
+      const cancelled = err && (err.name === 'NotFoundError' || /cancel/i.test(err.message));
+      setStatus('disconnected', cancelled ? 'No meter chosen' : 'Connection failed');
+      if (!cancelled) toast(err.message || String(err), true);
+    } finally {
+      els.connect.disabled = !support.ok;
+    }
+  }
+
+  function connectDemo() {
+    const meter = new SimulatedMeter();
+    attach(meter, true);
+    meter.connect().then(() => {
+      meter.setScene(Number(els['set-cct-range'].value), 0.35);
+      meter.startPolling(500);
+      els.model.textContent = 'Simulated LM4';
+      els.model.hidden = false;
+    });
+  }
+
+  els.connect.addEventListener('click', connectReal);
+  els.demo.addEventListener('click', connectDemo);
+  els.disconnect.addEventListener('click', () => {
+    if (state.meter) state.meter.disconnect();
+  });
+
+  // -- readings -------------------------------------------------------------
+  function averageRaw(samples) {
+    const n = samples[0].length;
+    const out = new Array(n).fill(0);
+    for (const s of samples) for (let i = 0; i < n; i++) out[i] += s[i] / samples.length;
+    return out;
+  }
+
+  function onReading(reading) {
+    const meter = state.meter;
+    if (!meter) return;
+    const cal = meter.calibration;
+    state.rawHistory.push(reading.raw);
+    if (state.rawHistory.length > LIVE_SMOOTHING) state.rawHistory.shift();
+    const smoothed = state.rawHistory.length > 1 ? processMeasurement({ model: reading.model, raw: averageRaw(state.rawHistory), batteryRaw: 0 }, cal) : reading;
+    state.live = { ...smoothed, battery: reading.battery, temperature: reading.temperature };
+    renderLive(state.live);
+
+    if (state.capture) {
+      state.capture.samples.push(reading.raw);
+      const n = state.capture.samples.length;
+      els.capture.textContent = `Capturing… ${n}/${CAPTURE_SAMPLES}`;
+      if (n >= CAPTURE_SAMPLES) {
+        const avg = processMeasurement({ model: reading.model, raw: averageRaw(state.capture.samples), batteryRaw: 0 }, cal);
+        const done = state.capture;
+        state.capture = null;
+        els.capture.textContent = 'Capture reading';
+        els.capture.disabled = false;
+        els.ambient.disabled = false;
+        done.resolve(avg);
+      }
+    }
+  }
+
+  function captureAverage() {
+    if (!state.meter || !state.meter.connected) return Promise.reject(new Error('Connect a meter first'));
+    if (state.capture) return Promise.reject(new Error('Already capturing'));
+    els.capture.disabled = true;
+    els.ambient.disabled = true;
+    return new Promise((resolve) => {
+      state.capture = { samples: [], resolve };
+    });
+  }
+
+  // -- live render ----------------------------------------------------------
+  function renderLive(r) {
+    const lit = r && r.lux > 0.5 && Number.isFinite(r.cct);
+    els.cct.textContent = lit ? fmt.int(r.cct) : '––––';
+    els.lux.textContent = r ? fmt.lux(r.lux) : '–';
+    els.duv.textContent = lit ? fmt.signed(r.duv, 4) : '–';
+    els.tint.textContent = lit ? fmt.signed(r.tint, 0) : '–';
+    els.ra.textContent = lit && r.Ra !== null ? fmt.fixed(r.Ra, 1) : '–';
+    els.r9.textContent = lit && r.R ? fmt.fixed(r.R[8], 1) : '–';
+    els.eml.textContent = lit && r.eml !== null ? fmt.int(r.eml) : '–';
+    els.xy.textContent = lit ? `${r.x.toFixed(4)}, ${r.y.toFixed(4)}` : '–';
+    els['cs-wrap'].hidden = !(r && r.model === 'lm4');
+    els.cs.textContent = lit && r.cs !== null ? fmt.fixed(r.cs, 3) : '–';
+    els.mode.textContent = r && r.modeName ? `· ${r.modeName}` : '';
+    els.rlist.textContent = lit && r.R ? r.R.map((v) => Math.round(v)).join(' ') : '–';
+    els.ra.title = r && r.criSource === 'spline' ? 'Estimated from a spline through the sensor bands' : r && r.criSource === 'opple-model' ? "Opple's LM4 model" : '';
+
+    if (r && r.battery && r.battery.percent !== null) {
+      els.battery.textContent = `battery ${Math.round(r.battery.percent)}%`;
+      els.battery.hidden = false;
+    }
+
+    const sun = els.sun;
+    if (lit) {
+      const colour = cctToCss(r.cct);
+      const glow = Math.min(1, Math.log10(1 + r.lux) / 3.5);
+      sun.style.setProperty('--sun', colour);
+      sun.style.setProperty('--glow', glow.toFixed(3));
+      sun.classList.add('slm__sun--lit');
+    } else {
+      sun.classList.remove('slm__sun--lit');
+    }
+    renderSpectrum(r);
+  }
+
+  function renderSpectrum(r) {
+    const host = els.spectrum;
+    if (!r || !r.bands) {
+      host.innerHTML = '';
+      return;
+    }
+    const max = Math.max(1e-9, ...r.bands);
+    host.innerHTML = r.bandWavelengths
+      .map((wl, i) => {
+        const h = Math.max(2, (100 * r.bands[i]) / max);
+        return `<div class="slm__band" title="${wl} nm"><div class="slm__band-bar" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div><span>${wl}</span></div>`;
+      })
+      .join('');
+  }
+
+  // -- check workflow -------------------------------------------------------
+  const genSelect = els.gen;
+  genSelect.value = state.gen;
+  function renderGenHint() {
+    els['gen-hint'].textContent = LED_GENERATIONS[state.gen].hint;
+  }
+  renderGenHint();
+  genSelect.addEventListener('change', () => {
+    state.gen = genSelect.value;
+    store.set(STORAGE.gen, state.gen);
+    renderGenHint();
+    renderChecks();
+  });
+
+  const syncRange = (range, out, unit) => {
+    const update = () => {
+      out.textContent = `${range.value}${unit}`;
+      if (state.simulated && state.meter && range === els['set-cct-range']) state.meter.setScene(Number(range.value), 0.35);
+    };
+    range.addEventListener('input', update);
+    update();
+  };
+  syncRange(els['set-cct-range'], els['set-cct-out'], ' K');
+  syncRange(els['set-b-range'], els['set-b-out'], '%');
+
+  function expectedFor(setK, genKey) {
+    const g = LED_GENERATIONS[genKey] || LED_GENERATIONS.unknown;
+    if (g.warm === null) return setK;
+    return Math.min(g.cool, Math.max(g.warm, setK));
+  }
+
+  function verdictFor(check) {
+    const expected = expectedFor(check.setCct, state.gen);
+    const delta = check.cct - expected;
+    if (check.lux < MIN_CHECK_LUX) return { key: 'dim', label: 'Too dim', delta, expected };
+    if (state.ambient && check.lux < state.ambient.lux * 20) return { key: 'ambient', label: 'Ambient light', delta, expected };
+    const a = Math.abs(delta);
+    if (a <= TOLERANCE_GOOD) return { key: 'good', label: 'Spot on', delta, expected };
+    if (a <= TOLERANCE_OK) return { key: 'ok', label: 'Close', delta, expected };
+    return { key: 'off', label: delta > 0 ? 'Too cool' : 'Too warm', delta, expected };
+  }
+
+  els.form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // Record the settings at the moment of the click, not when the average lands.
+    const setCct = Number(els['set-cct-range'].value);
+    const brightness = Number(els['set-b-range'].value);
+    try {
+      const r = await captureAverage();
+      if (!(r.lux > 0) || !Number.isFinite(r.cct)) {
+        toast('No light reaching the sensor', true);
+        return;
+      }
+      const check = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        ts: Date.now(),
+        setCct,
+        brightness,
+        gen: state.gen,
+        model: r.model,
+        simulated: state.simulated,
+        cct: r.cct,
+        lux: r.lux,
+        duv: r.duv,
+        tint: r.tint,
+        x: r.x,
+        y: r.y,
+        Ra: r.Ra,
+        R9: r.R ? r.R[8] : null,
+        eml: r.eml,
+      };
+      state.checks.push(check);
+      store.set(STORAGE.checks, state.checks);
+      renderChecks();
+      const v = verdictFor(check);
+      toast(`${fmt.int(check.cct)} K measured - ${v.label} (${fmt.signed(v.delta)} K)`);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  els.ambient.addEventListener('click', async () => {
+    try {
+      const r = await captureAverage();
+      state.ambient = { lux: r.lux, cct: Number.isFinite(r.cct) ? r.cct : null, ts: Date.now() };
+      store.set(STORAGE.ambient, state.ambient);
+      renderAmbient();
+      renderChecks();
+      toast(`Ambient recorded: ${fmt.lux(r.lux)} lux`);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  function renderAmbient() {
+    const a = state.ambient;
+    els['ambient-text'].innerHTML = a ? `Ambient baseline <b>${fmt.lux(a.lux)} lux</b>${a.cct ? ` at ${fmt.int(a.cct)} K` : ''}. Readings under 20× this are flagged. <button type="button" class="slm__btn slm__btn--link" data-el="ambient-clear">Forget</button>` : '';
+    const clearBtn = els['ambient-text'].querySelector('[data-el="ambient-clear"]');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        state.ambient = null;
+        store.set(STORAGE.ambient, null);
+        renderAmbient();
+        renderChecks();
+      });
+    }
+  }
+  renderAmbient();
+
+  els.clear.addEventListener('click', () => {
+    state.checks = [];
+    store.set(STORAGE.checks, state.checks);
+    renderChecks();
+  });
+
+  els.export.addEventListener('click', () => {
+    const cols = ['time', 'set_cct_k', 'brightness_pct', 'light_generation', 'expected_cct_k', 'measured_cct_k', 'delta_k', 'verdict', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', 'r9', 'eml', 'meter', 'simulated'];
+    const lines = [cols.join(',')];
+    for (const c of state.checks) {
+      const v = verdictFor(c);
+      lines.push(
+        [
+          new Date(c.ts).toISOString(),
+          c.setCct,
+          c.brightness,
+          state.gen,
+          v.expected,
+          c.cct.toFixed(0),
+          v.delta.toFixed(0),
+          v.label,
+          c.lux.toFixed(1),
+          c.duv.toFixed(4),
+          Number.isFinite(c.tint) ? c.tint.toFixed(1) : '',
+          c.x.toFixed(4),
+          c.y.toFixed(4),
+          c.Ra === null ? '' : c.Ra.toFixed(1),
+          c.R9 === null ? '' : c.R9.toFixed(1),
+          c.eml === null ? '' : c.eml.toFixed(0),
+          c.model,
+          c.simulated ? 'yes' : 'no',
+        ].join(','),
+      );
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sunday-light-check-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 0);
+  });
+
+  function renderChecks() {
+    const rows = state.checks;
+    els.results.hidden = rows.length === 0;
+    els.rows.innerHTML = rows
+      .slice()
+      .reverse()
+      .map((c) => {
+        const v = verdictFor(c);
+        return `<tr>
+          <td>${c.setCct} K</td>
+          <td>${c.brightness}%</td>
+          <td><b>${fmt.int(c.cct)} K</b></td>
+          <td class="slm__delta slm__delta--${v.key}">${fmt.signed(v.delta)}</td>
+          <td><span class="slm__verdict slm__verdict--${v.key}">${esc(v.label)}</span></td>
+          <td>${fmt.lux(c.lux)}</td>
+          <td>${fmt.signed(c.duv, 4)}</td>
+          <td>${fmt.fixed(c.Ra, 1)}</td>
+          <td>${fmt.fixed(c.R9, 1)}</td>
+          <td class="slm__muted">${fmt.time(c.ts)}${c.simulated ? ' <small>sim</small>' : ''}</td>
+          <td><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
+        </tr>`;
+      })
+      .join('');
+    els.rows.querySelectorAll('[data-remove]').forEach((b) => {
+      b.addEventListener('click', () => {
+        state.checks = state.checks.filter((c) => c.id !== b.dataset.remove);
+        store.set(STORAGE.checks, state.checks);
+        renderChecks();
+      });
+    });
+    const scored = rows.map(verdictFor).filter((v) => v.key !== 'dim' && v.key !== 'ambient');
+    if (scored.length) {
+      const mean = scored.reduce((a, v) => a + Math.abs(v.delta), 0) / scored.length;
+      const worst = Math.max(...scored.map((v) => Math.abs(v.delta)));
+      els.summary.innerHTML = `<b>${rows.length}</b> reading${rows.length === 1 ? '' : 's'} · mean error <b>${Math.round(mean)} K</b> · worst <b>${Math.round(worst)} K</b>`;
+    } else {
+      els.summary.textContent = `${rows.length} reading${rows.length === 1 ? '' : 's'}`;
+    }
+    renderChart();
+  }
+
+  // -- chart ----------------------------------------------------------------
+  function renderChart() {
+    const svg = els.chart;
+    const ns = 'http://www.w3.org/2000/svg';
+    const mk = (tag, attrs, text) => {
+      const n = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      if (text !== undefined) n.textContent = text;
+      return n;
+    };
+    svg.innerHTML = '';
+    const W = 560;
+    const H = 400;
+    const ML = 62;
+    const MR = 18;
+    const MT = 18;
+    const MB = 48;
+    const iw = W - ML - MR;
+    const ih = H - MT - MB;
+    const gen = LED_GENERATIONS[state.gen];
+    const pts = state.checks;
+    let lo = 2000;
+    let hi = 8000;
+    if (pts.length) {
+      lo = Math.min(lo, ...pts.map((p) => Math.min(p.setCct, p.cct)));
+      hi = Math.max(hi, ...pts.map((p) => Math.max(p.setCct, p.cct)));
+      lo = Math.floor(lo / 500) * 500;
+      hi = Math.ceil(hi / 500) * 500;
+    }
+    const x = (v) => ML + (iw * (v - lo)) / (hi - lo);
+    const y = (v) => MT + ih * (1 - (v - lo) / (hi - lo));
+
+    // grid
+    for (let v = lo; v <= hi; v += 1000) {
+      svg.appendChild(mk('line', { x1: x(v), y1: MT, x2: x(v), y2: MT + ih, class: 'slm__grid' }));
+      svg.appendChild(mk('line', { x1: ML, y1: y(v), x2: ML + iw, y2: y(v), class: 'slm__grid' }));
+      svg.appendChild(mk('text', { x: x(v), y: MT + ih + 18, class: 'slm__tick', 'text-anchor': 'middle' }, `${v / 1000}k`));
+      svg.appendChild(mk('text', { x: ML - 8, y: y(v) + 4, class: 'slm__tick', 'text-anchor': 'end' }, `${v / 1000}k`));
+    }
+    svg.appendChild(mk('text', { x: ML + iw / 2, y: H - 8, class: 'slm__axis', 'text-anchor': 'middle' }, 'SET IN THE APP (K)'));
+    svg.appendChild(mk('text', { x: 16, y: MT + ih / 2, class: 'slm__axis', 'text-anchor': 'middle', transform: `rotate(-90 16 ${MT + ih / 2})` }, 'MEASURED (K)'));
+
+    // tolerance band + ideal line (clamped to die limits when known)
+    const ideal = (v) => expectedFor(v, state.gen);
+    const steps = [];
+    for (let v = lo; v <= hi; v += 25) steps.push(v);
+    const band = `${steps.map((v, i) => `${i ? 'L' : 'M'}${x(v).toFixed(1)} ${y(ideal(v) + TOLERANCE_OK).toFixed(1)}`).join(' ')} ${steps
+      .slice()
+      .reverse()
+      .map((v) => `L${x(v).toFixed(1)} ${y(ideal(v) - TOLERANCE_OK).toFixed(1)}`)
+      .join(' ')} Z`;
+    svg.appendChild(mk('path', { d: band, class: 'slm__band-area' }));
+    svg.appendChild(mk('path', { d: steps.map((v, i) => `${i ? 'L' : 'M'}${x(v).toFixed(1)} ${y(ideal(v)).toFixed(1)}`).join(' '), class: 'slm__ideal' }));
+    if (gen.warm !== null) {
+      for (const k of [gen.warm, gen.cool]) {
+        svg.appendChild(mk('line', { x1: ML, y1: y(k), x2: ML + iw, y2: y(k), class: 'slm__die' }));
+        svg.appendChild(mk('text', { x: ML + iw - 4, y: y(k) - 4, class: 'slm__tick', 'text-anchor': 'end' }, `${k} K die`));
+      }
+    }
+
+    // points
+    for (const p of pts) {
+      const v = verdictFor(p);
+      const g = mk('g', { class: `slm__pt slm__pt--${v.key}` });
+      g.appendChild(mk('circle', { cx: x(p.setCct), cy: y(p.cct), r: 6 }));
+      g.appendChild(mk('title', {}, `${p.setCct} K set at ${p.brightness}% → ${Math.round(p.cct)} K (${fmt.signed(v.delta)} K) · ${fmt.lux(p.lux)} lux · Duv ${fmt.signed(p.duv, 4)} · ${v.label}`));
+      svg.appendChild(g);
+    }
+    if (!pts.length) svg.appendChild(mk('text', { x: ML + iw / 2, y: MT + ih / 2, class: 'slm__empty', 'text-anchor': 'middle' }, 'Captured readings appear here'));
+  }
+
+  renderLive(null);
+  renderChecks();
+  setStatus('disconnected', 'Not connected');
+
+  if (new URLSearchParams(location.search).get('demo') === '1') connectDemo();
+  return { state };
+}
+
+if (typeof window !== 'undefined') {
+  window.SundayLightMeter = { mount };
+  const auto = document.getElementById('sunday-light-meter');
+  if (auto) mount(auto);
+}
+
+</script>
+</body>
+</html>

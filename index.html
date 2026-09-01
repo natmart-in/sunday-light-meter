@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sunday Light Meter</title>
+  <meta name="description" content="Read lux, colour temperature, Duv and CRI from an Opple Light Master 3 or 4 in your browser, and check how accurately a Sunday light hits the colour you set.">
+  <meta name="theme-color" content="#fffbf5">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='40%25' cy='38%25' r='60%25'%3E%3Cstop offset='0' stop-color='%23fff3b0'/%3E%3Cstop offset='.55' stop-color='%23f7d94c'/%3E%3Cstop offset='1' stop-color='%23e86b3a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='28' fill='url(%23g)'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/style.css">
+  <style>
+    :root { color-scheme: light; }
+    html { background: #fffbf5; }
+    body { margin: 0; background: #fffbf5; color: #44403c; -webkit-font-smoothing: antialiased; }
+    .page-head { max-width: 1080px; margin: 0 auto; padding: 34px 20px 26px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+    .brand { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.02em; font-size: 18px; color: #292524; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+    .brand i { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 40% 38%, #fff3b0, #f7d94c 55%, #e86b3a); box-shadow: 0 4px 14px rgba(232, 107, 58, 0.35); }
+    .brand span { color: #78716c; font-weight: 400; }
+    .page-head a.gh { font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; color: #78716c; text-decoration: none; }
+    .page-head a.gh:hover { color: #c2582d; }
+    .intro { max-width: 1080px; margin: 0 auto; padding: 0 20px 28px; }
+    .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(38px, 6vw, 60px); color: #292524; margin: 0; max-width: 16ch; }
+    .intro h1 em { font-style: normal; background: linear-gradient(90deg, #f7d94c, #e86b3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 16px 0 0; }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <a class="brand" href="https://sundaylight.cc"><i></i>Sunday <span>Light Meter</span></a>
+    <a class="gh" href="https://github.com/natmart-in/sunday-light-meter">Open source on GitHub</a>
+  </header>
+  <section class="intro">
+    <h1>Measure the light <em>you actually get.</em></h1>
+    <p>Connect an Opple Light Master 3 or 4 over Bluetooth to read brightness, colour temperature, Duv and colour rendering live - then check how close your Sunday light lands to the setting in the app.</p>
+  </section>
+
+  <div id="sunday-light-meter"></div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
