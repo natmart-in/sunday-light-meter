@@ -31,7 +31,7 @@ The Light Master is the light meter most lighting hobbyists own. The excellent [
 
 1. Open the page in **Chrome or Edge** (desktop or Android). Safari and Firefox do not support Web Bluetooth; on iPhone/iPad use the [Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055) browser.
 2. Wake the meter (press its button) and close the Opple app - the meter accepts one Bluetooth connection at a time.
-3. Press **Connect light meter** and pick the meter in the browser dialog. A Light Master 4 shows up as `SigMesh`; a Light Master 3 as `Opple` or similar.
+3. Press **Connect light meter** and pick the meter in the browser dialog. A Light Master 4 shows up as `SigMesh`, a Light Master 3 as `LightMaster`.
 4. Readings stream. Press **Log reading** to average a few seconds and keep the result.
 
 | Reading | Meaning |
@@ -87,7 +87,7 @@ npm run serve     # http://localhost:8080/?debug=1 opens with the diagnostics lo
 
 ### Protocol notes
 
-Nordic UART service `6e400001-b5a3-f393-e0a9-e50e24dcca9e`. Commands are written to the notify characteristic `…0003` (the meter accepts this; the app does the same) and answers come back on it. Message = 11-byte header `[0, 0x13, 0, 0, seq, 0, bodyLen, 0, 0, opHi, opLo]` + body, wrapped in fragments whose first byte is `0x00` single / `0x80` first / `0xA0|i` middle / `0xC0|i` last. Opcodes: `0x0A00` measure → `0x0A01`, `0x0A04` read calibration → `0x0A05`. Measurement payload after the header: LM3 `[skip][6 x u16 BE][battery mV u16][temp]`; LM4 `[skip][9 x u16 BE][2 pad][battery raw u16]` - the length tells the models apart. Calibration: `float32 LE` factors from payload byte 1, seven for the LM3 and nine for the LM4. The Light Master 4 advertises as `SigMesh` with no service UUIDs in the advert, only Opple manufacturer data (`0x0539`) carrying its MAC.
+Nordic UART service `6e400001-b5a3-f393-e0a9-e50e24dcca9e`. Commands are written to the notify characteristic `…0003` (the meter accepts this; the app does the same) and answers come back on it. Message = 11-byte header `[0, 0x13, 0, 0, seq, 0, bodyLen, 0, 0, opHi, opLo]` + body, wrapped in fragments whose first byte is `0x00` single / `0x80` first / `0xA0|i` middle / `0xC0|i` last. Opcodes: `0x0A00` measure → `0x0A01`, `0x0A04` read calibration → `0x0A05`. Measurement payload after the header: LM3 `[skip][6 x u16 BE][battery mV u16][temp]`; LM4 `[skip][9 x u16 BE][2 pad][battery raw u16]` - the length tells the models apart. Calibration: `float32 LE` factors from payload byte 1, seven for the LM3 and nine for the LM4. Neither meter puts the UART service UUID in its advertisement, so the chooser has to match on name: the Light Master 4 advertises as `SigMesh`, the Light Master 3 as `LightMaster`, both with Opple manufacturer data (`0x0539`; the LM4's carries its MAC).
 
 ## Credits
 
