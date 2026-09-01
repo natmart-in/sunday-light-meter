@@ -64,6 +64,10 @@
 .slm__btn:disabled { opacity: 0.45; cursor: default; }
 .slm__btn--primary {
   background: linear-gradient(135deg, var(--slm-yellow) 0%, var(--slm-orange) 100%);
+  /* Paint the gradient from the outer edge. With the default padding-box origin it
+     tiles into the transparent border, leaving a wrapped-colour fringe round the pill.
+     Must follow the background shorthand, which resets the origin. */
+  background-origin: border-box; background-clip: border-box;
   color: var(--slm-white); box-shadow: 0 8px 28px rgba(232, 107, 58, 0.28);
 }
 .slm__btn--primary:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 12px 36px rgba(232, 107, 58, 0.38); }
