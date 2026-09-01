@@ -3,8 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sunday Light Meter</title>
-  <meta name="description" content="Read lux, colour temperature, Duv and CRI from an Opple Light Master 3 or 4 in your browser, and check how accurately a Sunday light hits the colour you set.">
+  <title>Opple Light Master 3 &amp; 4 web app - browser light meter for lux, CCT, Duv and CRI | Sunday Light</title>
+  <meta name="description" content="Free web app for the Opple Light Master 3 and Light Master 4. Connect over Web Bluetooth in Chrome and read lux, colour temperature (CCT), Duv, tint, CRI Ra and R1-R14, melanopic lux and circadian stimulus live, with a reading log and CSV export. No app, no account, nothing leaves your browser.">
+  <link rel="canonical" href="https://sundaylight.cc/pages/light-meter">
+  <meta property="og:title" content="Opple Light Master 3 & 4 web app - browser light meter">
+  <meta property="og:description" content="Read lux, CCT, Duv and CRI from an Opple Light Master in your browser over Web Bluetooth. Free, open source, from Sunday Light.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sundaylight.cc/pages/light-meter">
   <meta name="theme-color" content="#fffbf5">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='40%25' cy='38%25' r='60%25'%3E%3Cstop offset='0' stop-color='%23fff3b0'/%3E%3Cstop offset='.55' stop-color='%23f7d94c'/%3E%3Cstop offset='1' stop-color='%23e86b3a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='28' fill='url(%23g)'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,9 +27,13 @@
     .page-head a.gh { font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; color: #78716c; text-decoration: none; }
     .page-head a.gh:hover { color: #c2582d; }
     .intro { max-width: 1080px; margin: 0 auto; padding: 0 20px 28px; }
-    .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(38px, 6vw, 60px); color: #292524; margin: 0; max-width: 16ch; }
+    .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(36px, 5.6vw, 56px); color: #292524; margin: 0; max-width: 18ch; }
     .intro h1 em { font-style: normal; background: linear-gradient(90deg, #f7d94c, #e86b3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 16px 0 0; }
+    .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 62ch; margin: 16px 0 0; }
+    .about { max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; font-family: 'Inter', -apple-system, sans-serif; color: #78716c; font-size: 15px; line-height: 1.65; }
+    .about h2 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.02em; color: #292524; font-size: 24px; margin: 0 0 10px; }
+    .about p { max-width: 70ch; margin: 0 0 12px; }
+    .about a { color: #c2582d; }
   </style>
 </head>
 <body>
@@ -33,11 +42,17 @@
     <a class="gh" href="https://github.com/natmart-in/sunday-light-meter">Open source on GitHub</a>
   </header>
   <section class="intro">
-    <h1>Measure the light <em>you actually get.</em></h1>
-    <p>Connect an Opple Light Master 3 or 4 over Bluetooth to read brightness, colour temperature, Duv and colour rendering live - then check how close your Sunday light lands to the setting in the app.</p>
+    <h1>A light meter for your <em>Opple Light Master</em>, in the browser.</h1>
+    <p>Connect a Light Master 3 or 4 over Bluetooth and read lux, colour temperature, Duv, tint and colour rendering live - then log readings and export them as CSV. No app, no account, nothing leaves your browser.</p>
   </section>
 
   <div id="sunday-light-meter"></div>
+
+  <section class="about">
+    <h2>Why this exists</h2>
+    <p>We are <a href="https://sundaylight.cc">Sunday</a>, a small team in London building a lamp that brings real daylight indoors. We use Light Masters on the bench every day, wanted the readings on a laptop without the phone app, and could not find a browser tool that supported the Light Master 4 - so we built one and open-sourced it. It uses the calibration stored in your meter and the same colour maths as the Opple app.</p>
+    <p>Curious what a light that reaches 10,000 lux at your desk looks like? <a href="https://sundaylight.cc">Have a look at the Sunday light</a>.</p>
+  </section>
 
   <script type="module" src="src/app.js"></script>
 </body>

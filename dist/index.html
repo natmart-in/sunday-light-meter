@@ -3,15 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sunday Light Meter</title>
-  <meta name="description" content="Read lux, colour temperature, Duv and CRI from an Opple Light Master 3 or 4 in your browser, and check how accurately a Sunday light hits the colour you set.">
+  <title>Opple Light Master 3 &amp; 4 web app - browser light meter for lux, CCT, Duv and CRI | Sunday Light</title>
+  <meta name="description" content="Free web app for the Opple Light Master 3 and Light Master 4. Connect over Web Bluetooth in Chrome and read lux, colour temperature (CCT), Duv, tint, CRI Ra and R1-R14, melanopic lux and circadian stimulus live, with a reading log and CSV export. No app, no account, nothing leaves your browser.">
+  <link rel="canonical" href="https://sundaylight.cc/pages/light-meter">
+  <meta property="og:title" content="Opple Light Master 3 & 4 web app - browser light meter">
+  <meta property="og:description" content="Read lux, CCT, Duv and CRI from an Opple Light Master in your browser over Web Bluetooth. Free, open source, from Sunday Light.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sundaylight.cc/pages/light-meter">
   <meta name="theme-color" content="#fffbf5">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='40%25' cy='38%25' r='60%25'%3E%3Cstop offset='0' stop-color='%23fff3b0'/%3E%3Cstop offset='.55' stop-color='%23f7d94c'/%3E%3Cstop offset='1' stop-color='%23e86b3a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='28' fill='url(%23g)'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-/* Sunday Light Meter - scoped under .slm so it can sit inside the Shopify theme. */
+/* Light Meter - scoped under .slm so it can sit inside the Sunday Shopify theme. */
 
 .slm {
   --slm-cream: #fffbf5;
@@ -29,6 +34,7 @@
   --slm-ok: #5a9e6f;
   --slm-heading: var(--sunday-heading, 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif);
   --slm-body: var(--sunday-body, 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif);
+  --slm-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --slm-radius: 20px;
   --slm-shadow: 0 10px 40px rgba(232, 107, 58, 0.08), 0 1px 2px rgba(41, 37, 36, 0.06);
 
@@ -63,7 +69,7 @@
 .slm__btn--primary:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 12px 36px rgba(232, 107, 58, 0.38); }
 .slm__btn--ghost { border-color: var(--slm-charcoal); }
 .slm__btn--ghost:not(:disabled):hover { background: var(--slm-charcoal); color: var(--slm-cream); }
-.slm__btn--link { padding: 8px 4px; color: var(--slm-orange-dark); text-decoration: underline; text-underline-offset: 3px; font-weight: 400; }
+.slm__btn--link { padding: 0 2px; color: var(--slm-orange-dark); text-decoration: underline; text-underline-offset: 3px; font-weight: 400; font-size: inherit; }
 .slm__btn--sm { padding: 9px 16px; font-size: 13px; }
 
 /* notice */
@@ -89,7 +95,7 @@
   display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1.05fr); grid-template-areas: 'sun hero metrics' 'spectrum spectrum spectrum';
   gap: 20px 32px; align-items: center;
   background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius);
-  box-shadow: var(--slm-shadow); padding: 30px 34px 26px; margin: 0 0 30px; position: relative; overflow: hidden;
+  box-shadow: var(--slm-shadow); padding: 30px 34px 26px; margin: 0 0 22px; position: relative; overflow: hidden;
 }
 .slm__live::before {
   content: ''; position: absolute; inset: -40% -20% auto auto; width: 60%; aspect-ratio: 1; border-radius: 50%; pointer-events: none;
@@ -131,75 +137,43 @@
 .slm__band-bar { width: 100%; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
 .slm__band span { font-size: 10px; color: var(--slm-muted); letter-spacing: 0.04em; }
 
-/* check section */
-.slm__check { background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius); padding: 34px 34px 30px; }
-.slm__check-head h2 { font-size: clamp(26px, 3.5vw, 34px); font-weight: 500; }
-.slm__check-head p { max-width: 62ch; margin-top: 10px; color: var(--slm-gray); font-size: 15.5px; }
-.slm__check-grid { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 32px 40px; margin-top: 26px; align-items: start; }
-.slm__form { display: flex; flex-direction: column; gap: 18px; }
+/* reading log */
+.slm__log { background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius); padding: 22px 26px 24px; }
+.slm__log-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 18px; }
 .slm__field > span { display: block; font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray); margin-bottom: 8px; }
-.slm__field small { display: block; margin-top: 6px; font-size: 13px; }
-.slm__range { display: flex; align-items: center; gap: 14px; }
-.slm__range input[type='range'] { flex: 1; accent-color: var(--slm-orange); height: 28px; }
-.slm__range output { font-family: var(--slm-heading); font-weight: 500; font-size: 18px; color: var(--slm-charcoal); min-width: 72px; text-align: right; letter-spacing: -0.02em; }
-.slm__field select {
+.slm__field--grow { flex: 1 1 260px; }
+.slm__field input[type='text'] {
   width: 100%; font: inherit; font-size: 15px; color: var(--slm-charcoal); background: var(--slm-white);
-  border: 1.5px solid var(--slm-cream-deep); border-radius: 12px; padding: 11px 14px; appearance: auto;
+  border: 1.5px solid var(--slm-cream-deep); border-radius: 999px; padding: 12px 18px;
 }
-.slm__field select:focus { outline: none; border-color: var(--slm-orange); }
-.slm__actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.slm__ambient { font-size: 13.5px; color: var(--slm-gray); min-height: 1em; }
-.slm__ambient b { color: var(--slm-charcoal); }
-.slm__tips { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--slm-gray); display: flex; flex-direction: column; gap: 4px; }
-.slm__tips li::marker { color: var(--slm-orange); }
+.slm__field input[type='text']:focus { outline: none; border-color: var(--slm-orange); }
+.slm__hint { font-size: 13px; color: var(--slm-gray); flex-basis: 100%; }
 
-.slm__chart-wrap { background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: 16px; padding: 14px 14px 10px; }
-.slm__chart-wrap svg { display: block; width: 100%; height: auto; }
-.slm__grid { stroke: var(--slm-cream-dark); stroke-width: 1; }
-.slm__tick { font-family: var(--slm-body); font-size: 10.5px; fill: var(--slm-muted); }
-.slm__axis { font-family: var(--slm-body); font-size: 10px; font-weight: 500; letter-spacing: 0.12em; fill: var(--slm-gray); }
-.slm__band-area { fill: rgba(247, 217, 76, 0.22); }
-.slm__ideal { fill: none; stroke: var(--slm-charcoal); stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.55; }
-.slm__die { stroke: var(--slm-magenta); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.7; }
-.slm__empty { font-family: var(--slm-body); font-size: 13px; fill: var(--slm-muted); }
-.slm__pt circle { stroke: var(--slm-white); stroke-width: 2; fill: var(--slm-orange); cursor: pointer; transition: r 0.15s; }
-.slm__pt:hover circle { r: 8; }
-.slm__pt--ok circle { fill: #d4b93a; }
-.slm__pt--off circle { fill: var(--slm-magenta); }
-.slm__pt--dim circle, .slm__pt--ambient circle { fill: var(--slm-muted); }
-.slm__legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 6px 6px 0; font-size: 12px; color: var(--slm-gray); }
-.slm__legend span { display: inline-flex; align-items: center; gap: 7px; }
-.slm__legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
-.slm__legend-line { background: repeating-linear-gradient(90deg, var(--slm-charcoal) 0 4px, transparent 4px 8px); opacity: 0.6; }
-.slm__legend-band { background: rgba(247, 217, 76, 0.5); height: 8px !important; }
-.slm__legend-die { background: repeating-linear-gradient(90deg, var(--slm-magenta) 0 2px, transparent 2px 6px); }
-.slm__legend-dot { width: 10px !important; height: 10px !important; border-radius: 50% !important; background: var(--slm-orange); }
-
-/* results */
-.slm__results { margin-top: 28px; }
+.slm__results { margin-top: 22px; }
 .slm__results-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; color: var(--slm-gray); margin-bottom: 10px; }
 .slm__results-bar b { color: var(--slm-charcoal); }
 .slm__results-actions { display: flex; gap: 8px; }
 .slm__table-wrap { overflow-x: auto; background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: 14px; }
-.slm__table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 720px; }
+.slm__table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 820px; }
 .slm__table th { text-align: left; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray); padding: 12px 12px 8px; border-bottom: 1.5px solid var(--slm-cream-dark); white-space: nowrap; }
 .slm__table td { padding: 9px 12px; border-bottom: 1px solid var(--slm-cream-dark); white-space: nowrap; color: var(--slm-dark); }
 .slm__table tr:last-child td { border-bottom: 0; }
 .slm__table td b { color: var(--slm-charcoal); font-weight: 600; }
+.slm__table td.slm__label { max-width: 240px; overflow: hidden; text-overflow: ellipsis; color: var(--slm-charcoal); }
 .slm__muted { color: var(--slm-muted); }
-.slm__delta { font-weight: 600; }
-.slm__delta--good { color: var(--slm-ok); }
-.slm__delta--ok { color: #b3931f; }
-.slm__delta--off { color: var(--slm-magenta); }
-.slm__delta--dim, .slm__delta--ambient { color: var(--slm-muted); }
-.slm__verdict { display: inline-block; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: var(--slm-cream-dark); color: var(--slm-dark); }
-.slm__verdict--good { background: rgba(90, 158, 111, 0.14); color: #2f6b43; }
-.slm__verdict--ok { background: rgba(247, 217, 76, 0.32); color: #6f5a10; }
-.slm__verdict--off { background: rgba(196, 61, 110, 0.12); color: var(--slm-magenta); }
 .slm__x { border: 0; background: transparent; color: var(--slm-muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
 .slm__x:hover { color: var(--slm-magenta); background: var(--slm-cream-dark); }
 
-.slm__foot { margin-top: 26px; font-size: 13px; color: var(--slm-muted); max-width: 78ch; }
+.slm__foot { margin-top: 22px; font-size: 13px; color: var(--slm-muted); max-width: 82ch; }
+
+/* diagnostics */
+.slm__diag { margin-top: 16px; background: var(--slm-charcoal); color: #e7e0d6; border-radius: 14px; padding: 12px 14px 14px; }
+.slm__diag-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+.slm__diag-actions { display: flex; align-items: center; gap: 10px; }
+.slm__diag .slm__btn--ghost { border-color: #8a8178; color: #e7e0d6; }
+.slm__diag .slm__btn--ghost:hover { background: #e7e0d6; color: var(--slm-charcoal); }
+.slm__check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #cfc6ba; }
+.slm__diag-log { margin: 0; font-family: var(--slm-mono); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow: auto; color: #e7e0d6; }
 
 /* toast */
 .slm__toast {
@@ -215,14 +189,13 @@
 @media (max-width: 900px) {
   .slm__live { grid-template-columns: 150px minmax(0, 1fr); grid-template-areas: 'sun hero' 'metrics metrics' 'spectrum spectrum'; padding: 24px; gap: 18px 22px; }
   .slm__sun { width: 128px; height: 128px; }
-  .slm__check-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
   .slm { padding: 0 14px 40px; }
   .slm__live { grid-template-columns: 1fr; grid-template-areas: 'sun' 'hero' 'metrics' 'spectrum'; text-align: center; }
   .slm__hero-value { justify-content: center; }
   .slm__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
-  .slm__check { padding: 24px 18px; }
+  .slm__log { padding: 18px 16px 20px; }
   .slm__connect { flex-direction: column; align-items: stretch; }
   .slm__btn--primary { text-align: center; }
 }
@@ -242,9 +215,13 @@
     .page-head a.gh { font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; color: #78716c; text-decoration: none; }
     .page-head a.gh:hover { color: #c2582d; }
     .intro { max-width: 1080px; margin: 0 auto; padding: 0 20px 28px; }
-    .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(38px, 6vw, 60px); color: #292524; margin: 0; max-width: 16ch; }
+    .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(36px, 5.6vw, 56px); color: #292524; margin: 0; max-width: 18ch; }
     .intro h1 em { font-style: normal; background: linear-gradient(90deg, #f7d94c, #e86b3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 16px 0 0; }
+    .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 62ch; margin: 16px 0 0; }
+    .about { max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; font-family: 'Inter', -apple-system, sans-serif; color: #78716c; font-size: 15px; line-height: 1.65; }
+    .about h2 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.02em; color: #292524; font-size: 24px; margin: 0 0 10px; }
+    .about p { max-width: 70ch; margin: 0 0 12px; }
+    .about a { color: #c2582d; }
   </style>
 </head>
 <body>
@@ -253,11 +230,17 @@
     <a class="gh" href="https://github.com/natmart-in/sunday-light-meter">Open source on GitHub</a>
   </header>
   <section class="intro">
-    <h1>Measure the light <em>you actually get.</em></h1>
-    <p>Connect an Opple Light Master 3 or 4 over Bluetooth to read brightness, colour temperature, Duv and colour rendering live - then check how close your Sunday light lands to the setting in the app.</p>
+    <h1>A light meter for your <em>Opple Light Master</em>, in the browser.</h1>
+    <p>Connect a Light Master 3 or 4 over Bluetooth and read lux, colour temperature, Duv, tint and colour rendering live - then log readings and export them as CSV. No app, no account, nothing leaves your browser.</p>
   </section>
 
   <div id="sunday-light-meter"></div>
+
+  <section class="about">
+    <h2>Why this exists</h2>
+    <p>We are <a href="https://sundaylight.cc">Sunday</a>, a small team in London building a lamp that brings real daylight indoors. We use Light Masters on the bench every day, wanted the readings on a laptop without the phone app, and could not find a browser tool that supported the Light Master 4 - so we built one and open-sourced it. It uses the calibration stored in your meter and the same colour maths as the Opple app.</p>
+    <p>Curious what a light that reaches 10,000 lux at your desk looks like? <a href="https://sundaylight.cc">Have a look at the Sunday light</a>.</p>
+  </section>
 
   <script type="module">
 // ---- src/cie-data.js ----
@@ -1535,7 +1518,7 @@ function lm4Battery(batteryRaw) {
 //   meter.startPolling(500);
 //
 // Events: 'status' {state, message}, 'reading' (processed measurement),
-// 'battery' {percent, mv}, 'disconnected'.
+// 'log' {ts, level, message}, 'disconnected'.
 
 
 
@@ -1551,6 +1534,11 @@ const REQUEST_OPTIONS = {
   optionalServices: [NUS_SERVICE, 'battery_service'],
 };
 
+const CONNECT_TIMEOUT_MS = 15000;
+const COMMAND_TIMEOUT_MS = 3000;
+const MAX_CONSECUTIVE_TIMEOUTS = 3;
+const RECONNECT_ATTEMPTS = 3;
+
 function bluetoothSupport() {
   if (typeof navigator === 'undefined' || !navigator.bluetooth) {
     return { ok: false, reason: 'no-api' };
@@ -1559,6 +1547,16 @@ function bluetoothSupport() {
     return { ok: false, reason: 'insecure' };
   }
   return { ok: true };
+}
+
+const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ');
+
+function withTimeout(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /** Turn a raw measurement + calibration into the full processed reading. */
@@ -1575,21 +1573,24 @@ function processMeasurement(meas, cal) {
 }
 
 class OppleMeter extends EventTarget {
-  constructor() {
+  constructor({ verbose = false } = {}) {
     super();
+    this.verbose = verbose;
     this.device = null;
     this.server = null;
     this.writeChar = null;
     this.notifyChar = null;
     this.seq = 0;
     this.assembler = new MessageAssembler();
-    this.pending = null; // { opcode, resolve, reject, timer }
+    this.pending = null; // { opcode, resolve, reject, timer, sentAt }
     this.calibration = null;
     this.model = null;
     this.pollTimer = null;
     this.pollInterval = 500;
     this.inFlight = false;
+    this.consecutiveTimeouts = 0;
     this.manualDisconnect = false;
+    this.reconnecting = false;
     this.onNotify = this.onNotify.bind(this);
     this.onGattDisconnected = this.onGattDisconnected.bind(this);
   }
@@ -1602,7 +1603,16 @@ class OppleMeter extends EventTarget {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
 
+  log(message, level = 'info') {
+    this.emit('log', { ts: Date.now(), level, message });
+  }
+
+  debug(message) {
+    if (this.verbose) this.log(message, 'debug');
+  }
+
   status(state, message) {
+    this.log(`${state}: ${message}`);
     this.emit('status', { state, message });
   }
 
@@ -1614,16 +1624,31 @@ class OppleMeter extends EventTarget {
     const device = await navigator.bluetooth.requestDevice(REQUEST_OPTIONS);
     this.device = device;
     this.manualDisconnect = false;
+    this.log(`chosen device "${device.name || '(no name)'}" id=${device.id}`);
     device.addEventListener('gattserverdisconnected', this.onGattDisconnected);
-    await this.openSession();
+    try {
+      await this.openSession();
+    } catch (err) {
+      this.log(`session failed: ${err.name || ''} ${err.message}`, 'error');
+      this.teardown();
+      throw err;
+    }
     return this.info();
   }
 
   async openSession() {
     const name = this.device.name || 'Light Master';
     this.status('connecting', `Connecting to ${name}`);
-    this.server = await this.device.gatt.connect();
-    const service = await this.server.getPrimaryService(NUS_SERVICE);
+    try {
+      this.server = await withTimeout(this.device.gatt.connect(), CONNECT_TIMEOUT_MS, 'GATT connect');
+    } catch (err) {
+      // A connect that timed out is still pending inside the browser and would
+      // grab the meter the moment it advertises - cancel it explicitly.
+      this.cancelPendingConnect();
+      throw err;
+    }
+    this.log('GATT connected, discovering the UART service');
+    const service = await withTimeout(this.server.getPrimaryService(NUS_SERVICE), CONNECT_TIMEOUT_MS, 'service discovery');
     const tx = await service.getCharacteristic(NUS_TX);
     let rx = null;
     try {
@@ -1631,28 +1656,39 @@ class OppleMeter extends EventTarget {
     } catch (_) {
       rx = null;
     }
+    const props = (c) => (c ? Object.keys(c.properties).filter((k) => c.properties[k]).join(',') : 'absent');
+    this.log(`TX 0003 props=[${props(tx)}] RX 0002 props=[${props(rx)}]`);
     // Opple meters take commands on the notify characteristic; fall back to classic NUS RX.
     if (tx.properties.write || tx.properties.writeWithoutResponse) this.writeChar = tx;
     else if (rx) this.writeChar = rx;
     else throw new Error('No writable characteristic on this device');
     this.notifyChar = tx;
     this.assembler.reset();
+    this.pending = null;
     tx.addEventListener('characteristicvaluechanged', this.onNotify);
-    await tx.startNotifications();
+    await withTimeout(tx.startNotifications(), CONNECT_TIMEOUT_MS, 'notification subscribe');
+    this.log(`notifications on, writing commands to ${this.writeChar === tx ? '0003' : '0002'}`);
 
     this.status('calibrating', 'Reading sensor calibration');
     this.calibration = await this.readCalibration();
-    if (this.calibration) this.model = this.calibration.model;
+    if (this.calibration) {
+      this.model = this.calibration.model;
+      this.log(`calibration: ${this.calibration.kSensor.length} factors (${this.calibration.model}) = ${this.calibration.kSensor.map((k) => k.toFixed(4)).join(', ')}`);
+    } else {
+      this.log('calibration read failed twice - continuing with raw counts', 'warn');
+    }
     // A first measurement settles the model detection (the payload length is authoritative).
     const first = await this.measureRaw(4000);
     this.model = first.model;
+    this.log(`first measurement: ${first.model} raw=[${first.raw.join(', ')}] battery=${first.batteryRaw}`);
     if (this.calibration && this.calibration.model !== first.model) {
-      // Mismatched calibration length - trust the measurement and truncate/pad.
       const need = first.model === 'lm4' ? 9 : 7;
       const k = this.calibration.kSensor.slice(0, need);
       while (k.length < need) k.push(1);
       this.calibration = { model: first.model, kSensor: k };
+      this.log(`calibration length did not match the ${first.model} payload - adjusted to ${need} factors`, 'warn');
     }
+    this.consecutiveTimeouts = 0;
     this.status('connected', `${this.modelName()} connected`);
     this.emit('reading', processMeasurement(first, this.calibration));
   }
@@ -1673,30 +1709,31 @@ class OppleMeter extends EventTarget {
   async readCalibration() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const msg = await this.command(OPCODE.REQ_CAL, OPCODE.RES_CAL, 3000);
+        const msg = await this.command(OPCODE.REQ_CAL, OPCODE.RES_CAL, COMMAND_TIMEOUT_MS);
         const cal = parseCalibration(msg);
         if (cal) return cal;
-      } catch (_) {
-        // retry once
+        this.log(`calibration response too short (${msg.length} bytes)`, 'warn');
+      } catch (err) {
+        this.log(`calibration attempt ${attempt + 1}: ${err.message}`, 'warn');
       }
     }
     return null;
   }
 
-  async measureRaw(timeout = 3000) {
+  async measureRaw(timeout = COMMAND_TIMEOUT_MS) {
     const msg = await this.command(OPCODE.REQ_MEAS, OPCODE.RES_MEAS, timeout);
     const meas = parseMeasurement(msg);
-    if (!meas) throw new Error('Unparseable measurement');
+    if (!meas) throw new Error(`Unparseable measurement (${msg.length} bytes)`);
     return meas;
   }
 
   /** One calibrated, processed reading. */
-  async measure(timeout = 3000) {
+  async measure(timeout = COMMAND_TIMEOUT_MS) {
     const meas = await this.measureRaw(timeout);
     return processMeasurement(meas, this.calibration);
   }
 
-  command(opcode, responseOpcode, timeout = 3000, body = new Uint8Array(0)) {
+  command(opcode, responseOpcode, timeout = COMMAND_TIMEOUT_MS, body = new Uint8Array(0)) {
     if (!this.connected) return Promise.reject(new Error('Not connected'));
     if (this.pending) return Promise.reject(new Error('Command already in flight'));
     this.seq = (this.seq + 1) & 0xff;
@@ -1706,7 +1743,7 @@ class OppleMeter extends EventTarget {
         this.pending = null;
         reject(new Error('Meter did not answer (is it awake?)'));
       }, timeout);
-      this.pending = { opcode: responseOpcode, resolve, reject, timer };
+      this.pending = { opcode: responseOpcode, resolve, reject, timer, sentAt: performance.now() };
       this.writeFrames(frames).catch((err) => {
         clearTimeout(timer);
         this.pending = null;
@@ -1717,14 +1754,26 @@ class OppleMeter extends EventTarget {
 
   async writeFrames(frames) {
     for (const f of frames) {
-      if (this.writeChar.properties.writeWithoutResponse) await this.writeChar.writeValueWithoutResponse(f);
-      else await this.writeChar.writeValue(f);
+      this.debug(`> ${hex(f)}`);
+      const c = this.writeChar;
+      if (c.properties.writeWithoutResponse && typeof c.writeValueWithoutResponse === 'function') {
+        try {
+          await c.writeValueWithoutResponse(f);
+          continue;
+        } catch (err) {
+          if (!c.properties.write) throw err;
+          this.log(`write-without-response failed (${err.message}); using write-with-response`, 'warn');
+        }
+      }
+      if (typeof c.writeValueWithResponse === 'function') await c.writeValueWithResponse(f);
+      else await c.writeValue(f);
     }
   }
 
   onNotify(event) {
     const dv = event.target.value;
     const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    this.debug(`< ${hex(bytes)}`);
     const msg = this.assembler.feed(bytes);
     if (!msg) return;
     const code = opcodeOf(msg);
@@ -1732,9 +1781,11 @@ class OppleMeter extends EventTarget {
       const p = this.pending;
       this.pending = null;
       clearTimeout(p.timer);
+      this.debug(`response 0x${code.toString(16)} ${msg.length} bytes in ${Math.round(performance.now() - p.sentAt)} ms`);
       p.resolve(msg);
+    } else {
+      this.debug(`ignored message opcode=0x${code.toString(16)} len=${msg.length}${this.pending ? ` (waiting for 0x${this.pending.opcode.toString(16)})` : ''}`);
     }
-    // Unsolicited frames (opcode 0 heartbeats etc.) are ignored.
   }
 
   startPolling(intervalMs = 500) {
@@ -1745,9 +1796,18 @@ class OppleMeter extends EventTarget {
       if (!this.inFlight) {
         this.inFlight = true;
         try {
-          const reading = await this.measure(3000);
+          const reading = await this.measure(COMMAND_TIMEOUT_MS);
+          this.consecutiveTimeouts = 0;
           this.emit('reading', reading);
         } catch (err) {
+          this.consecutiveTimeouts += 1;
+          this.log(`poll: ${err.message} (${this.consecutiveTimeouts}/${MAX_CONSECUTIVE_TIMEOUTS})`, 'warn');
+          if (this.consecutiveTimeouts >= MAX_CONSECUTIVE_TIMEOUTS) {
+            this.inFlight = false;
+            this.status('warning', 'Meter stopped answering - reconnecting');
+            this.recycleLink();
+            return;
+          }
           this.status('warning', err.message);
         } finally {
           this.inFlight = false;
@@ -1763,38 +1823,28 @@ class OppleMeter extends EventTarget {
     this.pollTimer = null;
   }
 
-  async onGattDisconnected() {
+  cancelPendingConnect() {
+    try {
+      if (this.device && this.device.gatt) this.device.gatt.disconnect();
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /** Drop a link that is up but silent; the disconnect handler then reconnects. */
+  recycleLink() {
+    this.stopPolling();
+    if (this.device && this.device.gatt.connected) this.device.gatt.disconnect();
+    else this.onGattDisconnected();
+  }
+
+  teardown() {
     this.stopPolling();
     if (this.pending) {
       clearTimeout(this.pending.timer);
       this.pending.reject(new Error('Disconnected'));
       this.pending = null;
     }
-    this.writeChar = null;
-    if (this.manualDisconnect) {
-      this.status('disconnected', 'Disconnected');
-      this.emit('disconnected', {});
-      return;
-    }
-    // Try to come back (the meter drops the link when it sleeps).
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      this.status('reconnecting', `Link lost - reconnecting (${attempt}/3)`);
-      try {
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
-        await this.openSession();
-        this.startPolling(this.pollInterval);
-        return;
-      } catch (_) {
-        // keep trying
-      }
-    }
-    this.status('disconnected', 'Meter disconnected - press its button to wake it, then connect again');
-    this.emit('disconnected', {});
-  }
-
-  disconnect() {
-    this.manualDisconnect = true;
-    this.stopPolling();
     if (this.notifyChar) {
       try {
         this.notifyChar.removeEventListener('characteristicvaluechanged', this.onNotify);
@@ -1802,36 +1852,68 @@ class OppleMeter extends EventTarget {
         // ignore
       }
     }
+    this.writeChar = null;
+    this.notifyChar = null;
+    this.inFlight = false;
+  }
+
+  async onGattDisconnected() {
+    this.log('GATT link dropped', this.manualDisconnect ? 'info' : 'warn');
+    this.teardown();
+    if (this.manualDisconnect || this.reconnecting) {
+      if (this.manualDisconnect) {
+        this.status('disconnected', 'Disconnected');
+        this.emit('disconnected', {});
+      }
+      return;
+    }
+    // Try to come back (the meter drops the link when it sleeps or loses range).
+    this.reconnecting = true;
+    try {
+      for (let attempt = 1; attempt <= RECONNECT_ATTEMPTS && !this.manualDisconnect; attempt++) {
+        this.status('reconnecting', `Link lost - reconnecting (${attempt}/${RECONNECT_ATTEMPTS})`);
+        try {
+          await new Promise((r) => setTimeout(r, 800 * attempt));
+          if (this.manualDisconnect) break;
+          await this.openSession();
+          this.startPolling(this.pollInterval);
+          this.reconnecting = false;
+          return;
+        } catch (err) {
+          this.log(`reconnect ${attempt} failed: ${err.message}`, 'warn');
+          this.teardown();
+        }
+      }
+    } finally {
+      this.reconnecting = false;
+    }
+    this.cancelPendingConnect();
+    this.status('disconnected', 'Meter disconnected - press its button to wake it, then connect again');
+    this.emit('disconnected', {});
+  }
+
+  disconnect() {
+    this.manualDisconnect = true;
+    this.log('disconnect requested');
     if (this.device && this.device.gatt && this.device.gatt.connected) this.device.gatt.disconnect();
     else this.onGattDisconnected();
   }
 }
 
 // ---- src/app.js ----
-// Sunday Light Meter - page controller.
+// Light Meter - page controller.
 //
 // Mounts into a root element, talks to an Opple Light Master over Web
-// Bluetooth (see meter.js) and renders the live readout plus the "check
-// your Sunday light" calibration workflow.
+// Bluetooth (see meter.js) and renders the live readout, a reading log
+// with CSV export, and a diagnostics panel.
 
 
 
 
-const STORAGE = { checks: 'slm.checks.v1', gen: 'slm.gen.v1', ambient: 'slm.ambient.v1' };
+const STORAGE = { log: 'slm.readings.v1' };
 const CAPTURE_SAMPLES = 8;
 const LIVE_SMOOTHING = 3;
-const TOLERANCE_GOOD = 60;
-const TOLERANCE_OK = 150;
-const MIN_CHECK_LUX = 30;
-
-// Physical limits of the two LED dies fitted to Sunday lights. Commanded
-// colour temperatures beyond the dies are clamped by the light, so the
-// expected reading is the clamped value, not the number on the slider.
-const LED_GENERATIONS = {
-  unknown: { label: "Don't know", warm: null, cool: null, hint: 'Measure your light at its warmest and coolest settings: those two readings are its die limits.' },
-  genA: { label: 'Earlier lights (built up to Feb 2025)', warm: 2720, cool: 6900, hint: 'Warm die ~2720 K, cool die ~6900 K.' },
-  genB: { label: 'Later lights (built from Apr 2025)', warm: 2820, cool: 7930, hint: 'Warm die ~2820 K, cool die ~7930 K.' },
-};
+const DIAG_LINES = 500;
 
 const store = {
   get(key, fallback) {
@@ -1857,6 +1939,7 @@ const fmt = {
   signed: (v, d = 0) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : `${v > 0 ? '+' : ''}${v.toFixed(d)}`),
   lux: (v) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : v >= 100 ? Math.round(v).toLocaleString('en-GB') : v.toFixed(1)),
   time: (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  clock: (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(ts % 1000).padStart(3, '0'),
 };
 
 function esc(s) {
@@ -1898,6 +1981,7 @@ class SimulatedMeter extends EventTarget {
     this.targetK = 3000;
     this.level = 0.35;
     this.tilt = demoTiltFor(3000);
+    this.sceneTimer = null;
   }
 
   get connected() {
@@ -1913,6 +1997,7 @@ class SimulatedMeter extends EventTarget {
   }
 
   async connect() {
+    this.emit('log', { ts: Date.now(), level: 'info', message: 'simulated meter: no Bluetooth involved' });
     this.emit('status', { state: 'connected', message: 'Simulated meter connected - readings are synthetic' });
     return { name: 'Demo', model: 'lm4', modelName: this.modelName(), kSensor: DEMO_K };
   }
@@ -1925,9 +2010,21 @@ class SimulatedMeter extends EventTarget {
 
   startPolling(interval = 500) {
     this.stopPolling();
+    // Wander through a few "lamps" so the demo has something to log.
+    const scenes = [
+      [3000, 0.35],
+      [2700, 0.2],
+      [4000, 0.6],
+      [6500, 0.9],
+      [5000, 0.5],
+    ];
+    let i = 0;
+    this.sceneTimer = setInterval(() => {
+      i = (i + 1) % scenes.length;
+      this.setScene(scenes[i][0], scenes[i][1]);
+    }, 20000);
     const tick = () => {
       const t = (Date.now() - this.t0) / 1000;
-      // Slow colour drift (a few kelvin) plus per-sample noise, like a real light.
       const scale = this.level * (1 + 0.01 * Math.sin(t / 3));
       const raw = demoTilt(this.tilt + 0.01 * Math.sin(t / 7)).map((v) => Math.max(0, Math.round(v * scale * (1 + (Math.random() - 0.5) * 0.01))));
       this.emit('reading', processMeasurement({ model: 'lm4', raw, batteryRaw: 3300, temperature: null }, this.calibration));
@@ -1938,7 +2035,9 @@ class SimulatedMeter extends EventTarget {
 
   stopPolling() {
     if (this.timer) clearTimeout(this.timer);
+    if (this.sceneTimer) clearInterval(this.sceneTimer);
     this.timer = null;
+    this.sceneTimer = null;
   }
 
   disconnect() {
@@ -1953,9 +2052,6 @@ class SimulatedMeter extends EventTarget {
 // ---------------------------------------------------------------------------
 
 function template() {
-  const genOptions = Object.entries(LED_GENERATIONS)
-    .map(([k, g]) => `<option value="${k}">${esc(g.label)}</option>`)
-    .join('');
   return `
 <div class="slm__notice" data-el="support" hidden></div>
 
@@ -1994,54 +2090,15 @@ function template() {
   <div class="slm__spectrum" data-el="spectrum" aria-label="Sensor bands"></div>
 </section>
 
-<section class="slm__check" aria-label="Check your Sunday light">
-  <header class="slm__check-head">
-    <h2>Check your Sunday light</h2>
-    <p>Set a colour temperature in the Sunday app, point the meter at the light from where you sit, and capture. The chart shows how close the light lands to what you asked for.</p>
-  </header>
-  <div class="slm__check-grid">
-    <form class="slm__form" data-el="form">
-      <label class="slm__field">
-        <span>Colour temperature set in the app</span>
-        <div class="slm__range">
-          <input type="range" min="2000" max="8000" step="50" value="3000" data-el="set-cct-range">
-          <output data-el="set-cct-out">3000 K</output>
-        </div>
-      </label>
-      <label class="slm__field">
-        <span>Brightness set in the app</span>
-        <div class="slm__range">
-          <input type="range" min="1" max="100" step="1" value="100" data-el="set-b-range">
-          <output data-el="set-b-out">100%</output>
-        </div>
-      </label>
-      <label class="slm__field">
-        <span>Which light do you have?</span>
-        <select data-el="gen">${genOptions}</select>
-        <small data-el="gen-hint"></small>
-      </label>
-      <div class="slm__actions">
-        <button class="slm__btn slm__btn--primary" type="submit" data-el="capture" disabled>Capture reading</button>
-        <button class="slm__btn slm__btn--ghost" type="button" data-el="ambient" disabled title="With the light off, record the room's ambient light so dim readings are flagged">Record ambient</button>
-      </div>
-      <p class="slm__ambient" data-el="ambient-text"></p>
-      <ul class="slm__tips">
-        <li>Dark room, curtains closed. Daylight skews the reading cool.</li>
-        <li>Hold the meter where the light lands - your desk or sofa - with the sensor facing the light.</li>
-        <li>Give the light 30 seconds to settle after changing the setting.</li>
-        <li>Within ±60 K is spot on; ±150 K is within normal tolerance for a two-die mix.</li>
-      </ul>
-    </form>
-    <div class="slm__chart-wrap">
-      <svg data-el="chart" viewBox="0 0 560 400" role="img" aria-label="Measured colour temperature versus the setting"></svg>
-      <div class="slm__legend">
-        <span><i class="slm__legend-line"></i> perfect match</span>
-        <span><i class="slm__legend-band"></i> ±150 K</span>
-        <span><i class="slm__legend-die"></i> die limits</span>
-        <span><i class="slm__legend-dot"></i> your readings</span>
-      </div>
-    </div>
-  </div>
+<section class="slm__log" aria-label="Reading log">
+  <form class="slm__log-form" data-el="form">
+    <label class="slm__field slm__field--grow">
+      <span>Label</span>
+      <input type="text" data-el="label" placeholder="e.g. desk lamp at 3000 K" maxlength="80" autocomplete="off">
+    </label>
+    <button class="slm__btn slm__btn--primary" type="submit" data-el="capture" disabled>Log reading</button>
+    <span class="slm__hint">Averages ${CAPTURE_SAMPLES} samples, about ${Math.round(CAPTURE_SAMPLES / 2)} seconds.</span>
+  </form>
   <div class="slm__results" data-el="results" hidden>
     <div class="slm__results-bar">
       <span data-el="summary"></span>
@@ -2052,7 +2109,7 @@ function template() {
     </div>
     <div class="slm__table-wrap">
       <table class="slm__table">
-        <thead><tr><th>Set</th><th>Bright.</th><th>Measured</th><th>Δ</th><th>Verdict</th><th>Lux</th><th>Duv</th><th>Ra</th><th>R9</th><th>Time</th><th></th></tr></thead>
+        <thead><tr><th>Label</th><th>CCT</th><th>Lux</th><th>Duv</th><th>Tint</th><th>Ra</th><th>R9</th><th>EML</th><th>x, y</th><th>Time</th><th></th></tr></thead>
         <tbody data-el="rows"></tbody>
       </table>
     </div>
@@ -2060,8 +2117,20 @@ function template() {
 </section>
 
 <footer class="slm__foot">
-  <p>Works with the Opple Light Master 3 and 4 over Web Bluetooth in Chrome, Edge and other Chromium browsers (desktop and Android). On iPhone and iPad use the <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a> browser. Readings use each meter's own factory calibration and the same maths as the Opple app.</p>
+  <p>Works with the Opple Light Master 3 and 4 over Web Bluetooth in Chrome, Edge and other Chromium browsers (desktop and Android). On iPhone and iPad use the <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a> browser. Readings use each meter's own factory calibration and the same maths as the Opple app; nothing leaves your browser. <button type="button" class="slm__btn slm__btn--link" data-el="diag-toggle">Diagnostics</button></p>
 </footer>
+
+<section class="slm__diag" data-el="diag" hidden aria-label="Diagnostics">
+  <div class="slm__diag-bar">
+    <b>Diagnostics</b>
+    <span class="slm__diag-actions">
+      <label class="slm__check"><input type="checkbox" data-el="diag-verbose"> raw frames</label>
+      <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="diag-copy">Copy log</button>
+      <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="diag-clear">Clear</button>
+    </span>
+  </div>
+  <pre class="slm__diag-log" data-el="diag-log"></pre>
+</section>
 <div class="slm__toast" data-el="toast" hidden></div>
 `;
 }
@@ -2073,21 +2142,21 @@ function template() {
 function mount(root) {
   root.classList.add('slm');
   root.innerHTML = template();
-  const el = (name) => root.querySelector(`[data-el="${name}"]`);
   const els = {};
   root.querySelectorAll('[data-el]').forEach((n) => {
     els[n.dataset.el] = n;
   });
+  const params = new URLSearchParams(location.search);
 
   const state = {
     meter: null,
     simulated: false,
     live: null,
     rawHistory: [],
-    capture: null, // { samples: [], resolve }
-    checks: store.get(STORAGE.checks, []),
-    gen: store.get(STORAGE.gen, 'unknown'),
-    ambient: store.get(STORAGE.ambient, null),
+    capture: null, // { samples: [], resolve, reject }
+    readings: store.get(STORAGE.log, []),
+    diag: [],
+    verbose: params.get('debug') === '2',
   };
 
   let toastTimer = null;
@@ -2099,6 +2168,61 @@ function mount(root) {
     toastTimer = setTimeout(() => {
       els.toast.hidden = true;
     }, 4200);
+  }
+
+  // -- diagnostics ----------------------------------------------------------
+  function diag(message, level = 'info', ts = Date.now()) {
+    state.diag.push({ ts, level, message });
+    if (state.diag.length > DIAG_LINES) state.diag.shift();
+    if (!els.diag.hidden) renderDiag(true);
+    if (level === 'error' || level === 'warn') console.warn(`[light-meter] ${message}`);
+    else if (level !== 'debug') console.info(`[light-meter] ${message}`);
+  }
+
+  function diagText() {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const head = `Light meter diagnostics · ${new Date().toISOString()} · ${ua}`;
+    return [head, ...state.diag.map((l) => `${fmt.clock(l.ts)} ${l.level.padEnd(5)} ${l.message}`)].join('\n');
+  }
+
+  function renderDiag(append = false) {
+    const pre = els['diag-log'];
+    pre.textContent = state.diag.map((l) => `${fmt.clock(l.ts)} ${l.level.padEnd(5)} ${l.message}`).join('\n') || '(nothing yet)';
+    if (append) pre.scrollTop = pre.scrollHeight;
+  }
+
+  els['diag-toggle'].addEventListener('click', () => {
+    els.diag.hidden = !els.diag.hidden;
+    if (!els.diag.hidden) renderDiag(true);
+  });
+  els['diag-verbose'].checked = state.verbose;
+  els['diag-verbose'].addEventListener('change', () => {
+    state.verbose = els['diag-verbose'].checked;
+    if (state.meter && 'verbose' in state.meter) state.meter.verbose = state.verbose;
+  });
+  els['diag-clear'].addEventListener('click', () => {
+    state.diag = [];
+    renderDiag();
+  });
+  els['diag-copy'].addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(diagText());
+      toast('Diagnostics copied');
+    } catch (_) {
+      // Fallback: select the text so it can be copied manually.
+      const range = document.createRange();
+      range.selectNodeContents(els['diag-log']);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      toast('Select-all done - press copy', true);
+    }
+  });
+  if (params.get('debug')) els.diag.hidden = false;
+
+  diag(`page loaded · secure=${typeof window !== 'undefined' && window.isSecureContext} · bluetooth API=${typeof navigator !== 'undefined' && !!navigator.bluetooth}`);
+  if (typeof navigator !== 'undefined' && navigator.bluetooth && navigator.bluetooth.getAvailability) {
+    navigator.bluetooth.getAvailability().then((ok) => diag(`bluetooth adapter available=${ok}`)).catch(() => {});
   }
 
   // -- support banner -------------------------------------------------------
@@ -2117,12 +2241,11 @@ function mount(root) {
     els['status-text'].textContent = message;
     els.dot.className = `slm__dot slm__dot--${stateName}`;
     const connected = stateName === 'connected';
-    els.connect.hidden = connected;
-    els.disconnect.hidden = !connected;
-    els.demo.hidden = connected;
+    els.connect.hidden = connected || stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating';
+    els.disconnect.hidden = els.connect.hidden === false;
+    els.demo.hidden = !els.connect.hidden ? false : true;
     els.capture.disabled = !connected;
-    els.ambient.disabled = !connected;
-    if (!connected) {
+    if (stateName === 'disconnected') {
       els.model.hidden = true;
       els.battery.hidden = true;
       els.uncal.hidden = true;
@@ -2130,10 +2253,19 @@ function mount(root) {
   }
 
   function attach(meter, simulated) {
+    if (state.meter && state.meter !== meter) {
+      try {
+        state.meter.disconnect();
+      } catch (_) {
+        // ignore
+      }
+    }
     state.meter = meter;
     state.simulated = simulated;
     state.rawHistory = [];
+    meter.addEventListener('log', (e) => diag(e.detail.message, e.detail.level, e.detail.ts));
     meter.addEventListener('status', (e) => {
+      if (state.meter !== meter) return;
       setStatus(e.detail.state, e.detail.message);
       if (e.detail.state === 'connected') {
         els.model.textContent = meter.modelName();
@@ -2142,16 +2274,25 @@ function mount(root) {
       }
       if (e.detail.state === 'warning') toast(e.detail.message, true);
     });
-    meter.addEventListener('reading', (e) => onReading(e.detail));
+    meter.addEventListener('reading', (e) => {
+      if (state.meter === meter) onReading(e.detail);
+    });
     meter.addEventListener('disconnected', () => {
+      if (state.meter !== meter) return;
       state.meter = null;
       state.live = null;
+      if (state.capture) {
+        const c = state.capture;
+        state.capture = null;
+        c.reject(new Error('Meter disconnected during capture'));
+        els.capture.textContent = 'Log reading';
+      }
       renderLive(null);
     });
   }
 
   async function connectReal() {
-    const meter = new OppleMeter();
+    const meter = new OppleMeter({ verbose: state.verbose });
     attach(meter, false);
     els.connect.disabled = true;
     try {
@@ -2159,10 +2300,11 @@ function mount(root) {
       meter.startPolling(500);
       toast(`${meter.modelName()} connected${meter.calibration ? ' - calibration loaded' : ''}`);
     } catch (err) {
-      state.meter = null;
+      if (state.meter === meter) state.meter = null;
       const cancelled = err && (err.name === 'NotFoundError' || /cancel/i.test(err.message));
-      setStatus('disconnected', cancelled ? 'No meter chosen' : 'Connection failed');
-      if (!cancelled) toast(err.message || String(err), true);
+      diag(`connect failed: ${err.name || 'Error'}: ${err.message}`, cancelled ? 'info' : 'error');
+      setStatus('disconnected', cancelled ? 'No meter chosen' : `Connection failed - ${err.message}`);
+      if (!cancelled) toast(`${err.message}. Open Diagnostics for details.`, true);
     } finally {
       els.connect.disabled = !support.ok;
     }
@@ -2172,7 +2314,6 @@ function mount(root) {
     const meter = new SimulatedMeter();
     attach(meter, true);
     meter.connect().then(() => {
-      meter.setScene(Number(els['set-cct-range'].value), 0.35);
       meter.startPolling(500);
       els.model.textContent = 'Simulated LM4';
       els.model.hidden = false;
@@ -2206,14 +2347,13 @@ function mount(root) {
     if (state.capture) {
       state.capture.samples.push(reading.raw);
       const n = state.capture.samples.length;
-      els.capture.textContent = `Capturing… ${n}/${CAPTURE_SAMPLES}`;
+      els.capture.textContent = `Averaging… ${n}/${CAPTURE_SAMPLES}`;
       if (n >= CAPTURE_SAMPLES) {
         const avg = processMeasurement({ model: reading.model, raw: averageRaw(state.capture.samples), batteryRaw: 0 }, cal);
         const done = state.capture;
         state.capture = null;
-        els.capture.textContent = 'Capture reading';
+        els.capture.textContent = 'Log reading';
         els.capture.disabled = false;
-        els.ambient.disabled = false;
         done.resolve(avg);
       }
     }
@@ -2223,9 +2363,8 @@ function mount(root) {
     if (!state.meter || !state.meter.connected) return Promise.reject(new Error('Connect a meter first'));
     if (state.capture) return Promise.reject(new Error('Already capturing'));
     els.capture.disabled = true;
-    els.ambient.disabled = true;
-    return new Promise((resolve) => {
-      state.capture = { samples: [], resolve };
+    return new Promise((resolve, reject) => {
+      state.capture = { samples: [], resolve, reject };
     });
   }
 
@@ -2279,65 +2418,20 @@ function mount(root) {
       .join('');
   }
 
-  // -- check workflow -------------------------------------------------------
-  const genSelect = els.gen;
-  genSelect.value = state.gen;
-  function renderGenHint() {
-    els['gen-hint'].textContent = LED_GENERATIONS[state.gen].hint;
-  }
-  renderGenHint();
-  genSelect.addEventListener('change', () => {
-    state.gen = genSelect.value;
-    store.set(STORAGE.gen, state.gen);
-    renderGenHint();
-    renderChecks();
-  });
-
-  const syncRange = (range, out, unit) => {
-    const update = () => {
-      out.textContent = `${range.value}${unit}`;
-      if (state.simulated && state.meter && range === els['set-cct-range']) state.meter.setScene(Number(range.value), 0.35);
-    };
-    range.addEventListener('input', update);
-    update();
-  };
-  syncRange(els['set-cct-range'], els['set-cct-out'], ' K');
-  syncRange(els['set-b-range'], els['set-b-out'], '%');
-
-  function expectedFor(setK, genKey) {
-    const g = LED_GENERATIONS[genKey] || LED_GENERATIONS.unknown;
-    if (g.warm === null) return setK;
-    return Math.min(g.cool, Math.max(g.warm, setK));
-  }
-
-  function verdictFor(check) {
-    const expected = expectedFor(check.setCct, state.gen);
-    const delta = check.cct - expected;
-    if (check.lux < MIN_CHECK_LUX) return { key: 'dim', label: 'Too dim', delta, expected };
-    if (state.ambient && check.lux < state.ambient.lux * 20) return { key: 'ambient', label: 'Ambient light', delta, expected };
-    const a = Math.abs(delta);
-    if (a <= TOLERANCE_GOOD) return { key: 'good', label: 'Spot on', delta, expected };
-    if (a <= TOLERANCE_OK) return { key: 'ok', label: 'Close', delta, expected };
-    return { key: 'off', label: delta > 0 ? 'Too cool' : 'Too warm', delta, expected };
-  }
-
+  // -- reading log ----------------------------------------------------------
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    // Record the settings at the moment of the click, not when the average lands.
-    const setCct = Number(els['set-cct-range'].value);
-    const brightness = Number(els['set-b-range'].value);
+    const label = els.label.value.trim() || `Reading ${state.readings.length + 1}`;
     try {
       const r = await captureAverage();
       if (!(r.lux > 0) || !Number.isFinite(r.cct)) {
         toast('No light reaching the sensor', true);
         return;
       }
-      const check = {
+      state.readings.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         ts: Date.now(),
-        setCct,
-        brightness,
-        gen: state.gen,
+        label,
         model: r.model,
         simulated: state.simulated,
         cct: r.cct,
@@ -2347,76 +2441,44 @@ function mount(root) {
         x: r.x,
         y: r.y,
         Ra: r.Ra,
-        R9: r.R ? r.R[8] : null,
+        R: r.R,
         eml: r.eml,
-      };
-      state.checks.push(check);
-      store.set(STORAGE.checks, state.checks);
-      renderChecks();
-      const v = verdictFor(check);
-      toast(`${fmt.int(check.cct)} K measured - ${v.label} (${fmt.signed(v.delta)} K)`);
-    } catch (err) {
-      toast(err.message, true);
-    }
-  });
-
-  els.ambient.addEventListener('click', async () => {
-    try {
-      const r = await captureAverage();
-      state.ambient = { lux: r.lux, cct: Number.isFinite(r.cct) ? r.cct : null, ts: Date.now() };
-      store.set(STORAGE.ambient, state.ambient);
-      renderAmbient();
-      renderChecks();
-      toast(`Ambient recorded: ${fmt.lux(r.lux)} lux`);
-    } catch (err) {
-      toast(err.message, true);
-    }
-  });
-
-  function renderAmbient() {
-    const a = state.ambient;
-    els['ambient-text'].innerHTML = a ? `Ambient baseline <b>${fmt.lux(a.lux)} lux</b>${a.cct ? ` at ${fmt.int(a.cct)} K` : ''}. Readings under 20× this are flagged. <button type="button" class="slm__btn slm__btn--link" data-el="ambient-clear">Forget</button>` : '';
-    const clearBtn = els['ambient-text'].querySelector('[data-el="ambient-clear"]');
-    if (clearBtn) {
-      clearBtn.addEventListener('click', () => {
-        state.ambient = null;
-        store.set(STORAGE.ambient, null);
-        renderAmbient();
-        renderChecks();
+        cs: r.cs,
       });
+      store.set(STORAGE.log, state.readings);
+      renderReadings();
+      els.label.value = '';
+      toast(`Logged ${fmt.int(r.cct)} K · ${fmt.lux(r.lux)} lux`);
+    } catch (err) {
+      toast(err.message, true);
     }
-  }
-  renderAmbient();
+  });
 
   els.clear.addEventListener('click', () => {
-    state.checks = [];
-    store.set(STORAGE.checks, state.checks);
-    renderChecks();
+    state.readings = [];
+    store.set(STORAGE.log, state.readings);
+    renderReadings();
   });
 
   els.export.addEventListener('click', () => {
-    const cols = ['time', 'set_cct_k', 'brightness_pct', 'light_generation', 'expected_cct_k', 'measured_cct_k', 'delta_k', 'verdict', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', 'r9', 'eml', 'meter', 'simulated'];
+    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter', 'simulated'];
+    const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
-    for (const c of state.checks) {
-      const v = verdictFor(c);
+    for (const c of state.readings) {
       lines.push(
         [
           new Date(c.ts).toISOString(),
-          c.setCct,
-          c.brightness,
-          state.gen,
-          v.expected,
+          q(c.label),
           c.cct.toFixed(0),
-          v.delta.toFixed(0),
-          v.label,
           c.lux.toFixed(1),
           c.duv.toFixed(4),
           Number.isFinite(c.tint) ? c.tint.toFixed(1) : '',
           c.x.toFixed(4),
           c.y.toFixed(4),
           c.Ra === null ? '' : c.Ra.toFixed(1),
-          c.R9 === null ? '' : c.R9.toFixed(1),
-          c.eml === null ? '' : c.eml.toFixed(0),
+          ...Array.from({ length: 14 }, (_, i) => (c.R ? c.R[i].toFixed(1) : '')),
+          c.eml === null || c.eml === undefined ? '' : c.eml.toFixed(0),
+          c.cs === null || c.cs === undefined ? '' : c.cs.toFixed(3),
           c.model,
           c.simulated ? 'yes' : 'no',
         ].join(','),
@@ -2425,7 +2487,7 @@ function mount(root) {
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `sunday-light-check-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `light-meter-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -2434,130 +2496,51 @@ function mount(root) {
     }, 0);
   });
 
-  function renderChecks() {
-    const rows = state.checks;
+  function renderReadings() {
+    const rows = state.readings;
     els.results.hidden = rows.length === 0;
     els.rows.innerHTML = rows
       .slice()
       .reverse()
-      .map((c) => {
-        const v = verdictFor(c);
-        return `<tr>
-          <td>${c.setCct} K</td>
-          <td>${c.brightness}%</td>
+      .map(
+        (c) => `<tr>
+          <td class="slm__label">${esc(c.label)}</td>
           <td><b>${fmt.int(c.cct)} K</b></td>
-          <td class="slm__delta slm__delta--${v.key}">${fmt.signed(v.delta)}</td>
-          <td><span class="slm__verdict slm__verdict--${v.key}">${esc(v.label)}</span></td>
           <td>${fmt.lux(c.lux)}</td>
           <td>${fmt.signed(c.duv, 4)}</td>
+          <td>${fmt.signed(c.tint, 0)}</td>
           <td>${fmt.fixed(c.Ra, 1)}</td>
-          <td>${fmt.fixed(c.R9, 1)}</td>
+          <td>${c.R ? fmt.fixed(c.R[8], 1) : '–'}</td>
+          <td>${fmt.int(c.eml)}</td>
+          <td class="slm__muted">${c.x.toFixed(4)}, ${c.y.toFixed(4)}</td>
           <td class="slm__muted">${fmt.time(c.ts)}${c.simulated ? ' <small>sim</small>' : ''}</td>
           <td><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
-        </tr>`;
-      })
+        </tr>`,
+      )
       .join('');
     els.rows.querySelectorAll('[data-remove]').forEach((b) => {
       b.addEventListener('click', () => {
-        state.checks = state.checks.filter((c) => c.id !== b.dataset.remove);
-        store.set(STORAGE.checks, state.checks);
-        renderChecks();
+        state.readings = state.readings.filter((c) => c.id !== b.dataset.remove);
+        store.set(STORAGE.log, state.readings);
+        renderReadings();
       });
     });
-    const scored = rows.map(verdictFor).filter((v) => v.key !== 'dim' && v.key !== 'ambient');
-    if (scored.length) {
-      const mean = scored.reduce((a, v) => a + Math.abs(v.delta), 0) / scored.length;
-      const worst = Math.max(...scored.map((v) => Math.abs(v.delta)));
-      els.summary.innerHTML = `<b>${rows.length}</b> reading${rows.length === 1 ? '' : 's'} · mean error <b>${Math.round(mean)} K</b> · worst <b>${Math.round(worst)} K</b>`;
-    } else {
-      els.summary.textContent = `${rows.length} reading${rows.length === 1 ? '' : 's'}`;
-    }
-    renderChart();
-  }
-
-  // -- chart ----------------------------------------------------------------
-  function renderChart() {
-    const svg = els.chart;
-    const ns = 'http://www.w3.org/2000/svg';
-    const mk = (tag, attrs, text) => {
-      const n = document.createElementNS(ns, tag);
-      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-      if (text !== undefined) n.textContent = text;
-      return n;
-    };
-    svg.innerHTML = '';
-    const W = 560;
-    const H = 400;
-    const ML = 62;
-    const MR = 18;
-    const MT = 18;
-    const MB = 48;
-    const iw = W - ML - MR;
-    const ih = H - MT - MB;
-    const gen = LED_GENERATIONS[state.gen];
-    const pts = state.checks;
-    let lo = 2000;
-    let hi = 8000;
-    if (pts.length) {
-      lo = Math.min(lo, ...pts.map((p) => Math.min(p.setCct, p.cct)));
-      hi = Math.max(hi, ...pts.map((p) => Math.max(p.setCct, p.cct)));
-      lo = Math.floor(lo / 500) * 500;
-      hi = Math.ceil(hi / 500) * 500;
-    }
-    const x = (v) => ML + (iw * (v - lo)) / (hi - lo);
-    const y = (v) => MT + ih * (1 - (v - lo) / (hi - lo));
-
-    // grid
-    for (let v = lo; v <= hi; v += 1000) {
-      svg.appendChild(mk('line', { x1: x(v), y1: MT, x2: x(v), y2: MT + ih, class: 'slm__grid' }));
-      svg.appendChild(mk('line', { x1: ML, y1: y(v), x2: ML + iw, y2: y(v), class: 'slm__grid' }));
-      svg.appendChild(mk('text', { x: x(v), y: MT + ih + 18, class: 'slm__tick', 'text-anchor': 'middle' }, `${v / 1000}k`));
-      svg.appendChild(mk('text', { x: ML - 8, y: y(v) + 4, class: 'slm__tick', 'text-anchor': 'end' }, `${v / 1000}k`));
-    }
-    svg.appendChild(mk('text', { x: ML + iw / 2, y: H - 8, class: 'slm__axis', 'text-anchor': 'middle' }, 'SET IN THE APP (K)'));
-    svg.appendChild(mk('text', { x: 16, y: MT + ih / 2, class: 'slm__axis', 'text-anchor': 'middle', transform: `rotate(-90 16 ${MT + ih / 2})` }, 'MEASURED (K)'));
-
-    // tolerance band + ideal line (clamped to die limits when known)
-    const ideal = (v) => expectedFor(v, state.gen);
-    const steps = [];
-    for (let v = lo; v <= hi; v += 25) steps.push(v);
-    const band = `${steps.map((v, i) => `${i ? 'L' : 'M'}${x(v).toFixed(1)} ${y(ideal(v) + TOLERANCE_OK).toFixed(1)}`).join(' ')} ${steps
-      .slice()
-      .reverse()
-      .map((v) => `L${x(v).toFixed(1)} ${y(ideal(v) - TOLERANCE_OK).toFixed(1)}`)
-      .join(' ')} Z`;
-    svg.appendChild(mk('path', { d: band, class: 'slm__band-area' }));
-    svg.appendChild(mk('path', { d: steps.map((v, i) => `${i ? 'L' : 'M'}${x(v).toFixed(1)} ${y(ideal(v)).toFixed(1)}`).join(' '), class: 'slm__ideal' }));
-    if (gen.warm !== null) {
-      for (const k of [gen.warm, gen.cool]) {
-        svg.appendChild(mk('line', { x1: ML, y1: y(k), x2: ML + iw, y2: y(k), class: 'slm__die' }));
-        svg.appendChild(mk('text', { x: ML + iw - 4, y: y(k) - 4, class: 'slm__tick', 'text-anchor': 'end' }, `${k} K die`));
-      }
-    }
-
-    // points
-    for (const p of pts) {
-      const v = verdictFor(p);
-      const g = mk('g', { class: `slm__pt slm__pt--${v.key}` });
-      g.appendChild(mk('circle', { cx: x(p.setCct), cy: y(p.cct), r: 6 }));
-      g.appendChild(mk('title', {}, `${p.setCct} K set at ${p.brightness}% → ${Math.round(p.cct)} K (${fmt.signed(v.delta)} K) · ${fmt.lux(p.lux)} lux · Duv ${fmt.signed(p.duv, 4)} · ${v.label}`));
-      svg.appendChild(g);
-    }
-    if (!pts.length) svg.appendChild(mk('text', { x: ML + iw / 2, y: MT + ih / 2, class: 'slm__empty', 'text-anchor': 'middle' }, 'Captured readings appear here'));
+    els.summary.innerHTML = `<b>${rows.length}</b> reading${rows.length === 1 ? '' : 's'} saved in this browser`;
   }
 
   renderLive(null);
-  renderChecks();
+  renderReadings();
+  renderDiag();
   setStatus('disconnected', 'Not connected');
 
-  if (new URLSearchParams(location.search).get('demo') === '1') connectDemo();
-  return { state };
+  if (params.get('demo') === '1') connectDemo();
+  return { state, diagText };
 }
 
 if (typeof window !== 'undefined') {
   window.SundayLightMeter = { mount };
   const auto = document.getElementById('sunday-light-meter');
-  if (auto) mount(auto);
+  if (auto) window.SundayLightMeter.app = mount(auto);
 }
 
 </script>

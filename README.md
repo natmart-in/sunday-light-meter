@@ -1,33 +1,39 @@
 <p align="center">
-  <img src="docs/screenshot.jpg" alt="Sunday Light Meter reading 3,000 K" width="820">
+  <img src="docs/screenshot.jpg" alt="Light meter web app reading 3,000 K from an Opple Light Master" width="820">
 </p>
 
-<h1 align="center">Sunday Light Meter</h1>
+<h1 align="center">Light Meter for the Opple Light Master 3 &amp; 4</h1>
 
 <p align="center">
-  A light meter in your browser. Connect an <b>Opple Light Master 3 or 4</b> over Web Bluetooth and read lux, colour temperature, Duv, tint, CRI (Ra and R1-R14), melanopic lux and circadian stimulus live - then check how accurately a <a href="https://sundaylight.cc">Sunday</a> light hits the colour you set in the app.
+  A light meter in your browser. Connect an <b>Opple Light Master 3 or 4</b> over Web Bluetooth and read lux, colour temperature, Duv, tint, CRI (Ra and R1-R14), melanopic lux and circadian stimulus live. Log readings, export CSV. No app, no account, nothing leaves your browser.
 </p>
 
 <p align="center">
-  <a href="https://natmart-in.github.io/sunday-light-meter/"><b>Open the meter</b></a> ·
+  <a href="https://sundaylight.cc/pages/light-meter"><b>Open the meter</b></a> ·
   <a href="https://natmart-in.github.io/sunday-light-meter/?demo=1">try it with a simulated meter</a>
 </p>
 
-<p align="center"><em>A side project from Sunday, largely vibe-coded and not officially supported. Issues and PRs welcome on this repo. Not affiliated with Opple.</em></p>
+<p align="center"><em>Built and open-sourced by <a href="https://sundaylight.cc">Sunday Light</a>. A side project, largely vibe-coded and not officially supported - issues and PRs welcome here. Not affiliated with Opple.</em></p>
+
+## Why
+
+The Light Master is the light meter most lighting hobbyists own. The excellent [open-light-master](https://github.com/OlliV/open-light-master) web app only speaks to the Light Master 3 - the Light Master 4 has a different sensor and nobody had put its maths in a browser. We use Light Masters on our bench every day and wanted the readings on a laptop, so we built this and gave it away.
 
 ## What it does
 
-- Talks to the meter directly from the page - no app, no server, nothing leaves your browser.
-- Uses the meter's own factory calibration (the `kSensor` factors it stores) and the same maths as the Opple app, so the numbers match what the app would show.
+- Talks to the meter directly from the page over Web Bluetooth - no server, no install.
+- Uses the meter's own factory calibration (the `kSensor` factors it stores) and the same colour maths as the Opple app, so the numbers match what the app shows.
 - Supports both generations: the six-band **Light Master 3** and the AS7341-based **Light Master 4**, detected automatically.
-- **Check your Sunday light**: set a colour temperature and brightness in the Sunday app, capture an averaged reading, and see the error against the setting on a chart and in a table. Readings persist in the browser and export to CSV.
+- Live readout twice a second; a disc glows with the measured colour; the bars are the raw sensor bands.
+- **Reading log**: average eight samples, label it ("bedroom lamp 2700 K"), keep it in the browser, download everything as CSV including R1-R14.
+- **Diagnostics** panel with a copyable connection log, for when Bluetooth misbehaves.
 
 ## Using it
 
 1. Open the page in **Chrome or Edge** (desktop or Android). Safari and Firefox do not support Web Bluetooth; on iPhone/iPad use the [Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055) browser.
 2. Wake the meter (press its button) and close the Opple app - the meter accepts one Bluetooth connection at a time.
 3. Press **Connect light meter** and pick the meter in the browser dialog. A Light Master 4 shows up as `SigMesh`; a Light Master 3 as `Opple` or similar.
-4. Readings stream twice a second. The disc glows with the measured colour; the bars underneath are the raw sensor bands.
+4. Readings stream. Press **Log reading** to average a few seconds and keep the result.
 
 | Reading | Meaning |
 | --- | --- |
@@ -39,60 +45,23 @@
 | Melanopic (EML) | Equivalent melanopic lux, the light's effect on the circadian system |
 | Circadian CS | Rea circadian stimulus (Light Master 4 only) |
 
-## Checking a Sunday light
+### If it will not connect or keeps dropping
 
-Sunday lights mix a warm and a cool LED die to make the colour you ask for. This tool tells you how close the mix lands.
-
-1. Darken the room - daylight leaking in reads cool and skews the result.
-2. Set a colour temperature and brightness in the Sunday app and give the light 30 seconds to settle.
-3. Hold the meter where the light lands (your desk, the sofa) with the sensor facing the light. Enter the same setting on the page and press **Capture reading**. The page averages eight samples over about four seconds.
-4. Optional: with the light off, press **Record ambient** so dim readings dominated by room light get flagged.
-
-Verdicts: within **±60 K** is spot on, within **±150 K** is normal tolerance for a two-die mix, beyond that the light is reading too warm or too cool. "Too dim" means under 30 lux reached the sensor - move closer.
-
-The light cannot go warmer than its warm die or cooler than its cool die, so a setting outside that range is expected to clamp. Tell the page which light you have and it will judge against the clamped value and draw the die limits on the chart:
-
-| Light | Warm die | Cool die |
-| --- | --- | --- |
-| Earlier lights (built up to Feb 2025) | ~2720 K | ~6900 K |
-| Later lights (built from Apr 2025) | ~2820 K | ~7930 K |
-
-Not sure which you have? Set the app to its warmest and coolest settings and measure both - those two readings are your light's die limits.
-
-<p align="center"><img src="docs/screenshot-check.jpg" alt="Calibration check: chart of measured versus set colour temperature with die limits, and a results table" width="820"></p>
+- Only one thing can hold the meter: quit the Opple app on your phone and close any other tab with this page open.
+- Power-cycle the meter and make sure it is charged; a meter that drops the link a second or two after connecting is usually one that is asleep, flat, or still attached to something else.
+- Open **Diagnostics** at the bottom of the page: every step of the connection is logged with timings and the exact error, and *Copy log* gives you something to paste into an issue.
 
 ## How the numbers are calculated
 
 Both meters report raw counts per spectral band plus a per-unit calibration vector (`kSensor`) that the page reads over Bluetooth on connect and multiplies in before any colour maths.
 
-**Light Master 3** - six bands (450/500/550/570/600/650 nm). The source type is classified (monochromatic, incandescent, general) and the matching 3x7 tristimulus matrix gives XYZ; Y is lux. CRI is estimated from a natural cubic spline through the six bands (CIE 13.3-1995), EML from Opple's band fit. These are the matrices and rules reverse-engineered by [open-light-master](https://github.com/OlliV/open-light-master); the JavaScript port is checked against Sunday's Python bench implementation of the same maths to 1e-9 in `test/colour.test.js`.
+**Light Master 3** - six bands (450/500/550/570/600/650 nm). The source type is classified (monochromatic, incandescent, general) and the matching 3x7 tristimulus matrix gives XYZ; Y is lux. CRI is estimated from a natural cubic spline through the six bands (CIE 13.3-1995), EML from Opple's band fit. These are the matrices and rules reverse-engineered by [open-light-master](https://github.com/OlliV/open-light-master); the JavaScript port is checked against an independent Python implementation of the same maths to 1e-9 in `test/colour.test.js`.
 
 **Light Master 4** - eight AS7341 bands (415/445/480/515/555/590/630/680 nm) plus a clear channel. XYZ comes from the single 3x8 matrix the official Opple app uses (`LightmasterIVCoeff_20231115`, app v3.15.0), and CRI/EML/CS from the app's degree-3 polynomial model on the normalised bands. Both were extracted from the app by [opple-bridge](https://github.com/gabrielebaudo/opple-bridge) (MIT). On a real probe the page reads 4239 K / Ra 96.5 / R9 52.4 where the app showed 4236 K / 96.5 / 52.2. If a spectrum falls outside the model's domain the page falls back to the spline CRI and says so in the Ra tooltip.
 
 Shared formulas: CIE 1931 xy and 1960 uv, McCamy CCT, Ohno (2014) Duv polynomial (ANSI C78.377), DNG-style tint, CIE 13.3 CRI with Planckian (< 5000 K) or D-illuminant references.
 
 Caveats: CRI from six or eight bands is an estimate, not a spectroradiometer result - treat Ra to a couple of points and R9 loosely. Readings under a few lux are noise. McCamy is accurate roughly 2000-12500 K.
-
-## Putting it on sundaylight.cc
-
-The build produces a self-contained Shopify section in `dist/sunday-light-meter.liquid` (styles and script inline, scoped under `.slm`, using the theme's `--sunday-heading` / `--sunday-body` fonts).
-
-1. Copy `dist/sunday-light-meter.liquid` into the theme's `sections/` folder.
-2. Add a page template, e.g. `templates/page.light-meter.json`:
-
-   ```json
-   {
-     "sections": {
-       "page-hero": { "type": "sunday-page-hero", "settings": { "color_scheme": "scheme-1", "sky_wash": true, "heading": "Light meter", "subtitle": "<p>Measure the light you actually get.</p>" } },
-       "meter": { "type": "sunday-light-meter", "settings": { "color_scheme": "scheme-1", "heading": "" } }
-     },
-     "order": ["page-hero", "meter"]
-   }
-   ```
-
-3. In Shopify admin create a page (e.g. `/pages/light-meter`) and give it the `light-meter` template.
-
-Web Bluetooth needs an https page (Shopify is) and a click to start - both satisfied by the section as generated. If you would rather not touch the theme, an iframe works too as long as it is allowed to use Bluetooth: `<iframe src="https://natmart-in.github.io/sunday-light-meter/" allow="bluetooth" ...>`.
 
 ## Development
 
@@ -101,22 +70,24 @@ No dependencies. Plain ES modules, tested with Node's built-in runner.
 ```bash
 npm test          # maths and protocol tests
 npm run build     # regenerates dist/ (committed; CI fails if it is stale)
-npm run serve     # http://localhost:8080/?demo=1 for a simulated meter
+npm run serve     # http://localhost:8080/?demo=1 for a simulated meter, add &debug=1 for the log
 ```
 
 | File | What |
 | --- | --- |
 | `src/protocol.js` | NUS framing, fragment reassembly, LM3/LM4 payload parsing |
-| `src/meter.js` | Web Bluetooth session: connect, read calibration, poll, reconnect |
+| `src/meter.js` | Web Bluetooth session: connect, read calibration, poll, reconnect, diagnostics |
 | `src/colour.js` | Chromaticity, CCT, Duv, tint, spline SPD, CRI, battery, display colours |
 | `src/lm3.js` / `src/lm4.js` | Per-meter pipelines (matrices, mode logic, Opple's LM4 polynomial model) |
 | `src/cie-data.js` / `src/lm4-model-data.js` | Generated data tables - do not hand-edit |
 | `src/app.js` / `src/style.css` | The page |
-| `scripts/build.mjs` | Inlines everything into `dist/index.html` and the Shopify section |
+| `scripts/build.mjs` | Inlines everything into `dist/index.html` and a Shopify section |
+
+`dist/sunday-light-meter.liquid` is a self-contained Shopify theme section (styles and script inline, scoped under `.slm`) - that is how the page is embedded at [sundaylight.cc/pages/light-meter](https://sundaylight.cc/pages/light-meter). `dist/index.html` is the same thing as a standalone page.
 
 ### Protocol notes
 
-Nordic UART service `6e400001-b5a3-f393-e0a9-e50e24dcca9e`. Commands are written to the notify characteristic `…0003` (the meter accepts this; the app does the same) and answers come back on it. Message = 11-byte header `[0, 0x13, 0, 0, seq, 0, bodyLen, 0, 0, opHi, opLo]` + body, wrapped in fragments whose first byte is `0x00` single / `0x80` first / `0xA0|i` middle / `0xC0|i` last. Opcodes: `0x0A00` measure → `0x0A01`, `0x0A04` read calibration → `0x0A05`. Measurement payload after the header: LM3 `[skip][6 x u16 BE][battery mV u16][temp]`; LM4 `[skip][9 x u16 BE][2 pad][battery raw u16]` - the length tells the models apart. Calibration: `float32 LE` factors from payload byte 1, seven for the LM3 and nine for the LM4.
+Nordic UART service `6e400001-b5a3-f393-e0a9-e50e24dcca9e`. Commands are written to the notify characteristic `…0003` (the meter accepts this; the app does the same) and answers come back on it. Message = 11-byte header `[0, 0x13, 0, 0, seq, 0, bodyLen, 0, 0, opHi, opLo]` + body, wrapped in fragments whose first byte is `0x00` single / `0x80` first / `0xA0|i` middle / `0xC0|i` last. Opcodes: `0x0A00` measure → `0x0A01`, `0x0A04` read calibration → `0x0A05`. Measurement payload after the header: LM3 `[skip][6 x u16 BE][battery mV u16][temp]`; LM4 `[skip][9 x u16 BE][2 pad][battery raw u16]` - the length tells the models apart. Calibration: `float32 LE` factors from payload byte 1, seven for the LM3 and nine for the LM4. The Light Master 4 advertises as `SigMesh` with no service UUIDs in the advert, only Opple manufacturer data (`0x0539`) carrying its MAC.
 
 ## Credits
 

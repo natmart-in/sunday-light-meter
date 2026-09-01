@@ -1,28 +1,17 @@
-// Sunday Light Meter - page controller.
+// Light Meter - page controller.
 //
 // Mounts into a root element, talks to an Opple Light Master over Web
-// Bluetooth (see meter.js) and renders the live readout plus the "check
-// your Sunday light" calibration workflow.
+// Bluetooth (see meter.js) and renders the live readout, a reading log
+// with CSV export, and a diagnostics panel.
 
 import { OppleMeter, bluetoothSupport, processMeasurement } from './meter.js';
 import { cctToCss, wavelengthToCss } from './colour.js';
 import { lm4Process } from './lm4.js';
 
-const STORAGE = { checks: 'slm.checks.v1', gen: 'slm.gen.v1', ambient: 'slm.ambient.v1' };
+const STORAGE = { log: 'slm.readings.v1' };
 const CAPTURE_SAMPLES = 8;
 const LIVE_SMOOTHING = 3;
-const TOLERANCE_GOOD = 60;
-const TOLERANCE_OK = 150;
-const MIN_CHECK_LUX = 30;
-
-// Physical limits of the two LED dies fitted to Sunday lights. Commanded
-// colour temperatures beyond the dies are clamped by the light, so the
-// expected reading is the clamped value, not the number on the slider.
-const LED_GENERATIONS = {
-  unknown: { label: "Don't know", warm: null, cool: null, hint: 'Measure your light at its warmest and coolest settings: those two readings are its die limits.' },
-  genA: { label: 'Earlier lights (built up to Feb 2025)', warm: 2720, cool: 6900, hint: 'Warm die ~2720 K, cool die ~6900 K.' },
-  genB: { label: 'Later lights (built from Apr 2025)', warm: 2820, cool: 7930, hint: 'Warm die ~2820 K, cool die ~7930 K.' },
-};
+const DIAG_LINES = 500;
 
 const store = {
   get(key, fallback) {
@@ -48,6 +37,7 @@ const fmt = {
   signed: (v, d = 0) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : `${v > 0 ? '+' : ''}${v.toFixed(d)}`),
   lux: (v) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : v >= 100 ? Math.round(v).toLocaleString('en-GB') : v.toFixed(1)),
   time: (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  clock: (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(ts % 1000).padStart(3, '0'),
 };
 
 function esc(s) {
@@ -89,6 +79,7 @@ class SimulatedMeter extends EventTarget {
     this.targetK = 3000;
     this.level = 0.35;
     this.tilt = demoTiltFor(3000);
+    this.sceneTimer = null;
   }
 
   get connected() {
@@ -104,6 +95,7 @@ class SimulatedMeter extends EventTarget {
   }
 
   async connect() {
+    this.emit('log', { ts: Date.now(), level: 'info', message: 'simulated meter: no Bluetooth involved' });
     this.emit('status', { state: 'connected', message: 'Simulated meter connected - readings are synthetic' });
     return { name: 'Demo', model: 'lm4', modelName: this.modelName(), kSensor: DEMO_K };
   }
@@ -116,9 +108,21 @@ class SimulatedMeter extends EventTarget {
 
   startPolling(interval = 500) {
     this.stopPolling();
+    // Wander through a few "lamps" so the demo has something to log.
+    const scenes = [
+      [3000, 0.35],
+      [2700, 0.2],
+      [4000, 0.6],
+      [6500, 0.9],
+      [5000, 0.5],
+    ];
+    let i = 0;
+    this.sceneTimer = setInterval(() => {
+      i = (i + 1) % scenes.length;
+      this.setScene(scenes[i][0], scenes[i][1]);
+    }, 20000);
     const tick = () => {
       const t = (Date.now() - this.t0) / 1000;
-      // Slow colour drift (a few kelvin) plus per-sample noise, like a real light.
       const scale = this.level * (1 + 0.01 * Math.sin(t / 3));
       const raw = demoTilt(this.tilt + 0.01 * Math.sin(t / 7)).map((v) => Math.max(0, Math.round(v * scale * (1 + (Math.random() - 0.5) * 0.01))));
       this.emit('reading', processMeasurement({ model: 'lm4', raw, batteryRaw: 3300, temperature: null }, this.calibration));
@@ -129,7 +133,9 @@ class SimulatedMeter extends EventTarget {
 
   stopPolling() {
     if (this.timer) clearTimeout(this.timer);
+    if (this.sceneTimer) clearInterval(this.sceneTimer);
     this.timer = null;
+    this.sceneTimer = null;
   }
 
   disconnect() {
@@ -144,9 +150,6 @@ class SimulatedMeter extends EventTarget {
 // ---------------------------------------------------------------------------
 
 function template() {
-  const genOptions = Object.entries(LED_GENERATIONS)
-    .map(([k, g]) => `<option value="${k}">${esc(g.label)}</option>`)
-    .join('');
   return `
 <div class="slm__notice" data-el="support" hidden></div>
 
@@ -185,54 +188,15 @@ function template() {
   <div class="slm__spectrum" data-el="spectrum" aria-label="Sensor bands"></div>
 </section>
 
-<section class="slm__check" aria-label="Check your Sunday light">
-  <header class="slm__check-head">
-    <h2>Check your Sunday light</h2>
-    <p>Set a colour temperature in the Sunday app, point the meter at the light from where you sit, and capture. The chart shows how close the light lands to what you asked for.</p>
-  </header>
-  <div class="slm__check-grid">
-    <form class="slm__form" data-el="form">
-      <label class="slm__field">
-        <span>Colour temperature set in the app</span>
-        <div class="slm__range">
-          <input type="range" min="2000" max="8000" step="50" value="3000" data-el="set-cct-range">
-          <output data-el="set-cct-out">3000 K</output>
-        </div>
-      </label>
-      <label class="slm__field">
-        <span>Brightness set in the app</span>
-        <div class="slm__range">
-          <input type="range" min="1" max="100" step="1" value="100" data-el="set-b-range">
-          <output data-el="set-b-out">100%</output>
-        </div>
-      </label>
-      <label class="slm__field">
-        <span>Which light do you have?</span>
-        <select data-el="gen">${genOptions}</select>
-        <small data-el="gen-hint"></small>
-      </label>
-      <div class="slm__actions">
-        <button class="slm__btn slm__btn--primary" type="submit" data-el="capture" disabled>Capture reading</button>
-        <button class="slm__btn slm__btn--ghost" type="button" data-el="ambient" disabled title="With the light off, record the room's ambient light so dim readings are flagged">Record ambient</button>
-      </div>
-      <p class="slm__ambient" data-el="ambient-text"></p>
-      <ul class="slm__tips">
-        <li>Dark room, curtains closed. Daylight skews the reading cool.</li>
-        <li>Hold the meter where the light lands - your desk or sofa - with the sensor facing the light.</li>
-        <li>Give the light 30 seconds to settle after changing the setting.</li>
-        <li>Within ±60 K is spot on; ±150 K is within normal tolerance for a two-die mix.</li>
-      </ul>
-    </form>
-    <div class="slm__chart-wrap">
-      <svg data-el="chart" viewBox="0 0 560 400" role="img" aria-label="Measured colour temperature versus the setting"></svg>
-      <div class="slm__legend">
-        <span><i class="slm__legend-line"></i> perfect match</span>
-        <span><i class="slm__legend-band"></i> ±150 K</span>
-        <span><i class="slm__legend-die"></i> die limits</span>
-        <span><i class="slm__legend-dot"></i> your readings</span>
-      </div>
-    </div>
-  </div>
+<section class="slm__log" aria-label="Reading log">
+  <form class="slm__log-form" data-el="form">
+    <label class="slm__field slm__field--grow">
+      <span>Label</span>
+      <input type="text" data-el="label" placeholder="e.g. desk lamp at 3000 K" maxlength="80" autocomplete="off">
+    </label>
+    <button class="slm__btn slm__btn--primary" type="submit" data-el="capture" disabled>Log reading</button>
+    <span class="slm__hint">Averages ${CAPTURE_SAMPLES} samples, about ${Math.round(CAPTURE_SAMPLES / 2)} seconds.</span>
+  </form>
   <div class="slm__results" data-el="results" hidden>
     <div class="slm__results-bar">
       <span data-el="summary"></span>
@@ -243,7 +207,7 @@ function template() {
     </div>
     <div class="slm__table-wrap">
       <table class="slm__table">
-        <thead><tr><th>Set</th><th>Bright.</th><th>Measured</th><th>Δ</th><th>Verdict</th><th>Lux</th><th>Duv</th><th>Ra</th><th>R9</th><th>Time</th><th></th></tr></thead>
+        <thead><tr><th>Label</th><th>CCT</th><th>Lux</th><th>Duv</th><th>Tint</th><th>Ra</th><th>R9</th><th>EML</th><th>x, y</th><th>Time</th><th></th></tr></thead>
         <tbody data-el="rows"></tbody>
       </table>
     </div>
@@ -251,8 +215,20 @@ function template() {
 </section>
 
 <footer class="slm__foot">
-  <p>Works with the Opple Light Master 3 and 4 over Web Bluetooth in Chrome, Edge and other Chromium browsers (desktop and Android). On iPhone and iPad use the <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a> browser. Readings use each meter's own factory calibration and the same maths as the Opple app.</p>
+  <p>Works with the Opple Light Master 3 and 4 over Web Bluetooth in Chrome, Edge and other Chromium browsers (desktop and Android). On iPhone and iPad use the <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a> browser. Readings use each meter's own factory calibration and the same maths as the Opple app; nothing leaves your browser. <button type="button" class="slm__btn slm__btn--link" data-el="diag-toggle">Diagnostics</button></p>
 </footer>
+
+<section class="slm__diag" data-el="diag" hidden aria-label="Diagnostics">
+  <div class="slm__diag-bar">
+    <b>Diagnostics</b>
+    <span class="slm__diag-actions">
+      <label class="slm__check"><input type="checkbox" data-el="diag-verbose"> raw frames</label>
+      <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="diag-copy">Copy log</button>
+      <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="diag-clear">Clear</button>
+    </span>
+  </div>
+  <pre class="slm__diag-log" data-el="diag-log"></pre>
+</section>
 <div class="slm__toast" data-el="toast" hidden></div>
 `;
 }
@@ -264,21 +240,21 @@ function template() {
 export function mount(root) {
   root.classList.add('slm');
   root.innerHTML = template();
-  const el = (name) => root.querySelector(`[data-el="${name}"]`);
   const els = {};
   root.querySelectorAll('[data-el]').forEach((n) => {
     els[n.dataset.el] = n;
   });
+  const params = new URLSearchParams(location.search);
 
   const state = {
     meter: null,
     simulated: false,
     live: null,
     rawHistory: [],
-    capture: null, // { samples: [], resolve }
-    checks: store.get(STORAGE.checks, []),
-    gen: store.get(STORAGE.gen, 'unknown'),
-    ambient: store.get(STORAGE.ambient, null),
+    capture: null, // { samples: [], resolve, reject }
+    readings: store.get(STORAGE.log, []),
+    diag: [],
+    verbose: params.get('debug') === '2',
   };
 
   let toastTimer = null;
@@ -290,6 +266,61 @@ export function mount(root) {
     toastTimer = setTimeout(() => {
       els.toast.hidden = true;
     }, 4200);
+  }
+
+  // -- diagnostics ----------------------------------------------------------
+  function diag(message, level = 'info', ts = Date.now()) {
+    state.diag.push({ ts, level, message });
+    if (state.diag.length > DIAG_LINES) state.diag.shift();
+    if (!els.diag.hidden) renderDiag(true);
+    if (level === 'error' || level === 'warn') console.warn(`[light-meter] ${message}`);
+    else if (level !== 'debug') console.info(`[light-meter] ${message}`);
+  }
+
+  function diagText() {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const head = `Light meter diagnostics · ${new Date().toISOString()} · ${ua}`;
+    return [head, ...state.diag.map((l) => `${fmt.clock(l.ts)} ${l.level.padEnd(5)} ${l.message}`)].join('\n');
+  }
+
+  function renderDiag(append = false) {
+    const pre = els['diag-log'];
+    pre.textContent = state.diag.map((l) => `${fmt.clock(l.ts)} ${l.level.padEnd(5)} ${l.message}`).join('\n') || '(nothing yet)';
+    if (append) pre.scrollTop = pre.scrollHeight;
+  }
+
+  els['diag-toggle'].addEventListener('click', () => {
+    els.diag.hidden = !els.diag.hidden;
+    if (!els.diag.hidden) renderDiag(true);
+  });
+  els['diag-verbose'].checked = state.verbose;
+  els['diag-verbose'].addEventListener('change', () => {
+    state.verbose = els['diag-verbose'].checked;
+    if (state.meter && 'verbose' in state.meter) state.meter.verbose = state.verbose;
+  });
+  els['diag-clear'].addEventListener('click', () => {
+    state.diag = [];
+    renderDiag();
+  });
+  els['diag-copy'].addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(diagText());
+      toast('Diagnostics copied');
+    } catch (_) {
+      // Fallback: select the text so it can be copied manually.
+      const range = document.createRange();
+      range.selectNodeContents(els['diag-log']);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      toast('Select-all done - press copy', true);
+    }
+  });
+  if (params.get('debug')) els.diag.hidden = false;
+
+  diag(`page loaded · secure=${typeof window !== 'undefined' && window.isSecureContext} · bluetooth API=${typeof navigator !== 'undefined' && !!navigator.bluetooth}`);
+  if (typeof navigator !== 'undefined' && navigator.bluetooth && navigator.bluetooth.getAvailability) {
+    navigator.bluetooth.getAvailability().then((ok) => diag(`bluetooth adapter available=${ok}`)).catch(() => {});
   }
 
   // -- support banner -------------------------------------------------------
@@ -308,12 +339,11 @@ export function mount(root) {
     els['status-text'].textContent = message;
     els.dot.className = `slm__dot slm__dot--${stateName}`;
     const connected = stateName === 'connected';
-    els.connect.hidden = connected;
-    els.disconnect.hidden = !connected;
-    els.demo.hidden = connected;
+    els.connect.hidden = connected || stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating';
+    els.disconnect.hidden = els.connect.hidden === false;
+    els.demo.hidden = !els.connect.hidden ? false : true;
     els.capture.disabled = !connected;
-    els.ambient.disabled = !connected;
-    if (!connected) {
+    if (stateName === 'disconnected') {
       els.model.hidden = true;
       els.battery.hidden = true;
       els.uncal.hidden = true;
@@ -321,10 +351,19 @@ export function mount(root) {
   }
 
   function attach(meter, simulated) {
+    if (state.meter && state.meter !== meter) {
+      try {
+        state.meter.disconnect();
+      } catch (_) {
+        // ignore
+      }
+    }
     state.meter = meter;
     state.simulated = simulated;
     state.rawHistory = [];
+    meter.addEventListener('log', (e) => diag(e.detail.message, e.detail.level, e.detail.ts));
     meter.addEventListener('status', (e) => {
+      if (state.meter !== meter) return;
       setStatus(e.detail.state, e.detail.message);
       if (e.detail.state === 'connected') {
         els.model.textContent = meter.modelName();
@@ -333,16 +372,25 @@ export function mount(root) {
       }
       if (e.detail.state === 'warning') toast(e.detail.message, true);
     });
-    meter.addEventListener('reading', (e) => onReading(e.detail));
+    meter.addEventListener('reading', (e) => {
+      if (state.meter === meter) onReading(e.detail);
+    });
     meter.addEventListener('disconnected', () => {
+      if (state.meter !== meter) return;
       state.meter = null;
       state.live = null;
+      if (state.capture) {
+        const c = state.capture;
+        state.capture = null;
+        c.reject(new Error('Meter disconnected during capture'));
+        els.capture.textContent = 'Log reading';
+      }
       renderLive(null);
     });
   }
 
   async function connectReal() {
-    const meter = new OppleMeter();
+    const meter = new OppleMeter({ verbose: state.verbose });
     attach(meter, false);
     els.connect.disabled = true;
     try {
@@ -350,10 +398,11 @@ export function mount(root) {
       meter.startPolling(500);
       toast(`${meter.modelName()} connected${meter.calibration ? ' - calibration loaded' : ''}`);
     } catch (err) {
-      state.meter = null;
+      if (state.meter === meter) state.meter = null;
       const cancelled = err && (err.name === 'NotFoundError' || /cancel/i.test(err.message));
-      setStatus('disconnected', cancelled ? 'No meter chosen' : 'Connection failed');
-      if (!cancelled) toast(err.message || String(err), true);
+      diag(`connect failed: ${err.name || 'Error'}: ${err.message}`, cancelled ? 'info' : 'error');
+      setStatus('disconnected', cancelled ? 'No meter chosen' : `Connection failed - ${err.message}`);
+      if (!cancelled) toast(`${err.message}. Open Diagnostics for details.`, true);
     } finally {
       els.connect.disabled = !support.ok;
     }
@@ -363,7 +412,6 @@ export function mount(root) {
     const meter = new SimulatedMeter();
     attach(meter, true);
     meter.connect().then(() => {
-      meter.setScene(Number(els['set-cct-range'].value), 0.35);
       meter.startPolling(500);
       els.model.textContent = 'Simulated LM4';
       els.model.hidden = false;
@@ -397,14 +445,13 @@ export function mount(root) {
     if (state.capture) {
       state.capture.samples.push(reading.raw);
       const n = state.capture.samples.length;
-      els.capture.textContent = `Capturing… ${n}/${CAPTURE_SAMPLES}`;
+      els.capture.textContent = `Averaging… ${n}/${CAPTURE_SAMPLES}`;
       if (n >= CAPTURE_SAMPLES) {
         const avg = processMeasurement({ model: reading.model, raw: averageRaw(state.capture.samples), batteryRaw: 0 }, cal);
         const done = state.capture;
         state.capture = null;
-        els.capture.textContent = 'Capture reading';
+        els.capture.textContent = 'Log reading';
         els.capture.disabled = false;
-        els.ambient.disabled = false;
         done.resolve(avg);
       }
     }
@@ -414,9 +461,8 @@ export function mount(root) {
     if (!state.meter || !state.meter.connected) return Promise.reject(new Error('Connect a meter first'));
     if (state.capture) return Promise.reject(new Error('Already capturing'));
     els.capture.disabled = true;
-    els.ambient.disabled = true;
-    return new Promise((resolve) => {
-      state.capture = { samples: [], resolve };
+    return new Promise((resolve, reject) => {
+      state.capture = { samples: [], resolve, reject };
     });
   }
 
@@ -470,65 +516,20 @@ export function mount(root) {
       .join('');
   }
 
-  // -- check workflow -------------------------------------------------------
-  const genSelect = els.gen;
-  genSelect.value = state.gen;
-  function renderGenHint() {
-    els['gen-hint'].textContent = LED_GENERATIONS[state.gen].hint;
-  }
-  renderGenHint();
-  genSelect.addEventListener('change', () => {
-    state.gen = genSelect.value;
-    store.set(STORAGE.gen, state.gen);
-    renderGenHint();
-    renderChecks();
-  });
-
-  const syncRange = (range, out, unit) => {
-    const update = () => {
-      out.textContent = `${range.value}${unit}`;
-      if (state.simulated && state.meter && range === els['set-cct-range']) state.meter.setScene(Number(range.value), 0.35);
-    };
-    range.addEventListener('input', update);
-    update();
-  };
-  syncRange(els['set-cct-range'], els['set-cct-out'], ' K');
-  syncRange(els['set-b-range'], els['set-b-out'], '%');
-
-  function expectedFor(setK, genKey) {
-    const g = LED_GENERATIONS[genKey] || LED_GENERATIONS.unknown;
-    if (g.warm === null) return setK;
-    return Math.min(g.cool, Math.max(g.warm, setK));
-  }
-
-  function verdictFor(check) {
-    const expected = expectedFor(check.setCct, state.gen);
-    const delta = check.cct - expected;
-    if (check.lux < MIN_CHECK_LUX) return { key: 'dim', label: 'Too dim', delta, expected };
-    if (state.ambient && check.lux < state.ambient.lux * 20) return { key: 'ambient', label: 'Ambient light', delta, expected };
-    const a = Math.abs(delta);
-    if (a <= TOLERANCE_GOOD) return { key: 'good', label: 'Spot on', delta, expected };
-    if (a <= TOLERANCE_OK) return { key: 'ok', label: 'Close', delta, expected };
-    return { key: 'off', label: delta > 0 ? 'Too cool' : 'Too warm', delta, expected };
-  }
-
+  // -- reading log ----------------------------------------------------------
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    // Record the settings at the moment of the click, not when the average lands.
-    const setCct = Number(els['set-cct-range'].value);
-    const brightness = Number(els['set-b-range'].value);
+    const label = els.label.value.trim() || `Reading ${state.readings.length + 1}`;
     try {
       const r = await captureAverage();
       if (!(r.lux > 0) || !Number.isFinite(r.cct)) {
         toast('No light reaching the sensor', true);
         return;
       }
-      const check = {
+      state.readings.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         ts: Date.now(),
-        setCct,
-        brightness,
-        gen: state.gen,
+        label,
         model: r.model,
         simulated: state.simulated,
         cct: r.cct,
@@ -538,76 +539,44 @@ export function mount(root) {
         x: r.x,
         y: r.y,
         Ra: r.Ra,
-        R9: r.R ? r.R[8] : null,
+        R: r.R,
         eml: r.eml,
-      };
-      state.checks.push(check);
-      store.set(STORAGE.checks, state.checks);
-      renderChecks();
-      const v = verdictFor(check);
-      toast(`${fmt.int(check.cct)} K measured - ${v.label} (${fmt.signed(v.delta)} K)`);
-    } catch (err) {
-      toast(err.message, true);
-    }
-  });
-
-  els.ambient.addEventListener('click', async () => {
-    try {
-      const r = await captureAverage();
-      state.ambient = { lux: r.lux, cct: Number.isFinite(r.cct) ? r.cct : null, ts: Date.now() };
-      store.set(STORAGE.ambient, state.ambient);
-      renderAmbient();
-      renderChecks();
-      toast(`Ambient recorded: ${fmt.lux(r.lux)} lux`);
-    } catch (err) {
-      toast(err.message, true);
-    }
-  });
-
-  function renderAmbient() {
-    const a = state.ambient;
-    els['ambient-text'].innerHTML = a ? `Ambient baseline <b>${fmt.lux(a.lux)} lux</b>${a.cct ? ` at ${fmt.int(a.cct)} K` : ''}. Readings under 20× this are flagged. <button type="button" class="slm__btn slm__btn--link" data-el="ambient-clear">Forget</button>` : '';
-    const clearBtn = els['ambient-text'].querySelector('[data-el="ambient-clear"]');
-    if (clearBtn) {
-      clearBtn.addEventListener('click', () => {
-        state.ambient = null;
-        store.set(STORAGE.ambient, null);
-        renderAmbient();
-        renderChecks();
+        cs: r.cs,
       });
+      store.set(STORAGE.log, state.readings);
+      renderReadings();
+      els.label.value = '';
+      toast(`Logged ${fmt.int(r.cct)} K · ${fmt.lux(r.lux)} lux`);
+    } catch (err) {
+      toast(err.message, true);
     }
-  }
-  renderAmbient();
+  });
 
   els.clear.addEventListener('click', () => {
-    state.checks = [];
-    store.set(STORAGE.checks, state.checks);
-    renderChecks();
+    state.readings = [];
+    store.set(STORAGE.log, state.readings);
+    renderReadings();
   });
 
   els.export.addEventListener('click', () => {
-    const cols = ['time', 'set_cct_k', 'brightness_pct', 'light_generation', 'expected_cct_k', 'measured_cct_k', 'delta_k', 'verdict', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', 'r9', 'eml', 'meter', 'simulated'];
+    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter', 'simulated'];
+    const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
-    for (const c of state.checks) {
-      const v = verdictFor(c);
+    for (const c of state.readings) {
       lines.push(
         [
           new Date(c.ts).toISOString(),
-          c.setCct,
-          c.brightness,
-          state.gen,
-          v.expected,
+          q(c.label),
           c.cct.toFixed(0),
-          v.delta.toFixed(0),
-          v.label,
           c.lux.toFixed(1),
           c.duv.toFixed(4),
           Number.isFinite(c.tint) ? c.tint.toFixed(1) : '',
           c.x.toFixed(4),
           c.y.toFixed(4),
           c.Ra === null ? '' : c.Ra.toFixed(1),
-          c.R9 === null ? '' : c.R9.toFixed(1),
-          c.eml === null ? '' : c.eml.toFixed(0),
+          ...Array.from({ length: 14 }, (_, i) => (c.R ? c.R[i].toFixed(1) : '')),
+          c.eml === null || c.eml === undefined ? '' : c.eml.toFixed(0),
+          c.cs === null || c.cs === undefined ? '' : c.cs.toFixed(3),
           c.model,
           c.simulated ? 'yes' : 'no',
         ].join(','),
@@ -616,7 +585,7 @@ export function mount(root) {
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `sunday-light-check-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `light-meter-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -625,128 +594,49 @@ export function mount(root) {
     }, 0);
   });
 
-  function renderChecks() {
-    const rows = state.checks;
+  function renderReadings() {
+    const rows = state.readings;
     els.results.hidden = rows.length === 0;
     els.rows.innerHTML = rows
       .slice()
       .reverse()
-      .map((c) => {
-        const v = verdictFor(c);
-        return `<tr>
-          <td>${c.setCct} K</td>
-          <td>${c.brightness}%</td>
+      .map(
+        (c) => `<tr>
+          <td class="slm__label">${esc(c.label)}</td>
           <td><b>${fmt.int(c.cct)} K</b></td>
-          <td class="slm__delta slm__delta--${v.key}">${fmt.signed(v.delta)}</td>
-          <td><span class="slm__verdict slm__verdict--${v.key}">${esc(v.label)}</span></td>
           <td>${fmt.lux(c.lux)}</td>
           <td>${fmt.signed(c.duv, 4)}</td>
+          <td>${fmt.signed(c.tint, 0)}</td>
           <td>${fmt.fixed(c.Ra, 1)}</td>
-          <td>${fmt.fixed(c.R9, 1)}</td>
+          <td>${c.R ? fmt.fixed(c.R[8], 1) : '–'}</td>
+          <td>${fmt.int(c.eml)}</td>
+          <td class="slm__muted">${c.x.toFixed(4)}, ${c.y.toFixed(4)}</td>
           <td class="slm__muted">${fmt.time(c.ts)}${c.simulated ? ' <small>sim</small>' : ''}</td>
           <td><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
-        </tr>`;
-      })
+        </tr>`,
+      )
       .join('');
     els.rows.querySelectorAll('[data-remove]').forEach((b) => {
       b.addEventListener('click', () => {
-        state.checks = state.checks.filter((c) => c.id !== b.dataset.remove);
-        store.set(STORAGE.checks, state.checks);
-        renderChecks();
+        state.readings = state.readings.filter((c) => c.id !== b.dataset.remove);
+        store.set(STORAGE.log, state.readings);
+        renderReadings();
       });
     });
-    const scored = rows.map(verdictFor).filter((v) => v.key !== 'dim' && v.key !== 'ambient');
-    if (scored.length) {
-      const mean = scored.reduce((a, v) => a + Math.abs(v.delta), 0) / scored.length;
-      const worst = Math.max(...scored.map((v) => Math.abs(v.delta)));
-      els.summary.innerHTML = `<b>${rows.length}</b> reading${rows.length === 1 ? '' : 's'} · mean error <b>${Math.round(mean)} K</b> · worst <b>${Math.round(worst)} K</b>`;
-    } else {
-      els.summary.textContent = `${rows.length} reading${rows.length === 1 ? '' : 's'}`;
-    }
-    renderChart();
-  }
-
-  // -- chart ----------------------------------------------------------------
-  function renderChart() {
-    const svg = els.chart;
-    const ns = 'http://www.w3.org/2000/svg';
-    const mk = (tag, attrs, text) => {
-      const n = document.createElementNS(ns, tag);
-      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-      if (text !== undefined) n.textContent = text;
-      return n;
-    };
-    svg.innerHTML = '';
-    const W = 560;
-    const H = 400;
-    const ML = 62;
-    const MR = 18;
-    const MT = 18;
-    const MB = 48;
-    const iw = W - ML - MR;
-    const ih = H - MT - MB;
-    const gen = LED_GENERATIONS[state.gen];
-    const pts = state.checks;
-    let lo = 2000;
-    let hi = 8000;
-    if (pts.length) {
-      lo = Math.min(lo, ...pts.map((p) => Math.min(p.setCct, p.cct)));
-      hi = Math.max(hi, ...pts.map((p) => Math.max(p.setCct, p.cct)));
-      lo = Math.floor(lo / 500) * 500;
-      hi = Math.ceil(hi / 500) * 500;
-    }
-    const x = (v) => ML + (iw * (v - lo)) / (hi - lo);
-    const y = (v) => MT + ih * (1 - (v - lo) / (hi - lo));
-
-    // grid
-    for (let v = lo; v <= hi; v += 1000) {
-      svg.appendChild(mk('line', { x1: x(v), y1: MT, x2: x(v), y2: MT + ih, class: 'slm__grid' }));
-      svg.appendChild(mk('line', { x1: ML, y1: y(v), x2: ML + iw, y2: y(v), class: 'slm__grid' }));
-      svg.appendChild(mk('text', { x: x(v), y: MT + ih + 18, class: 'slm__tick', 'text-anchor': 'middle' }, `${v / 1000}k`));
-      svg.appendChild(mk('text', { x: ML - 8, y: y(v) + 4, class: 'slm__tick', 'text-anchor': 'end' }, `${v / 1000}k`));
-    }
-    svg.appendChild(mk('text', { x: ML + iw / 2, y: H - 8, class: 'slm__axis', 'text-anchor': 'middle' }, 'SET IN THE APP (K)'));
-    svg.appendChild(mk('text', { x: 16, y: MT + ih / 2, class: 'slm__axis', 'text-anchor': 'middle', transform: `rotate(-90 16 ${MT + ih / 2})` }, 'MEASURED (K)'));
-
-    // tolerance band + ideal line (clamped to die limits when known)
-    const ideal = (v) => expectedFor(v, state.gen);
-    const steps = [];
-    for (let v = lo; v <= hi; v += 25) steps.push(v);
-    const band = `${steps.map((v, i) => `${i ? 'L' : 'M'}${x(v).toFixed(1)} ${y(ideal(v) + TOLERANCE_OK).toFixed(1)}`).join(' ')} ${steps
-      .slice()
-      .reverse()
-      .map((v) => `L${x(v).toFixed(1)} ${y(ideal(v) - TOLERANCE_OK).toFixed(1)}`)
-      .join(' ')} Z`;
-    svg.appendChild(mk('path', { d: band, class: 'slm__band-area' }));
-    svg.appendChild(mk('path', { d: steps.map((v, i) => `${i ? 'L' : 'M'}${x(v).toFixed(1)} ${y(ideal(v)).toFixed(1)}`).join(' '), class: 'slm__ideal' }));
-    if (gen.warm !== null) {
-      for (const k of [gen.warm, gen.cool]) {
-        svg.appendChild(mk('line', { x1: ML, y1: y(k), x2: ML + iw, y2: y(k), class: 'slm__die' }));
-        svg.appendChild(mk('text', { x: ML + iw - 4, y: y(k) - 4, class: 'slm__tick', 'text-anchor': 'end' }, `${k} K die`));
-      }
-    }
-
-    // points
-    for (const p of pts) {
-      const v = verdictFor(p);
-      const g = mk('g', { class: `slm__pt slm__pt--${v.key}` });
-      g.appendChild(mk('circle', { cx: x(p.setCct), cy: y(p.cct), r: 6 }));
-      g.appendChild(mk('title', {}, `${p.setCct} K set at ${p.brightness}% → ${Math.round(p.cct)} K (${fmt.signed(v.delta)} K) · ${fmt.lux(p.lux)} lux · Duv ${fmt.signed(p.duv, 4)} · ${v.label}`));
-      svg.appendChild(g);
-    }
-    if (!pts.length) svg.appendChild(mk('text', { x: ML + iw / 2, y: MT + ih / 2, class: 'slm__empty', 'text-anchor': 'middle' }, 'Captured readings appear here'));
+    els.summary.innerHTML = `<b>${rows.length}</b> reading${rows.length === 1 ? '' : 's'} saved in this browser`;
   }
 
   renderLive(null);
-  renderChecks();
+  renderReadings();
+  renderDiag();
   setStatus('disconnected', 'Not connected');
 
-  if (new URLSearchParams(location.search).get('demo') === '1') connectDemo();
-  return { state };
+  if (params.get('demo') === '1') connectDemo();
+  return { state, diagText };
 }
 
 if (typeof window !== 'undefined') {
   window.SundayLightMeter = { mount };
   const auto = document.getElementById('sunday-light-meter');
-  if (auto) mount(auto);
+  if (auto) window.SundayLightMeter.app = mount(auto);
 }
