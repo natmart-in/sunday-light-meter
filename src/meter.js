@@ -135,7 +135,7 @@ export function processMeasurement(meas, cal) {
   if (meas.model === 'lm4') {
     const { channels } = lm4Calibrate(meas.raw, kSensor || new Array(9).fill(1));
     const reading = lm4Process(channels);
-    return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, battery: lm4Battery(meas.batteryRaw), temperature: null, ts: Date.now() };
+    return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, battery: lm4Battery(meas.batteryRaw), temperature: meas.temperature ?? null, ts: Date.now() };
   }
   const { channels, c1 } = lm3Calibrate(meas.raw, kSensor || new Array(7).fill(1));
   const reading = lm3Process(channels, c1);

@@ -95,3 +95,28 @@ test('calibration: 7 floats for LM3, 9 for LM4, little-endian at payload[1]', ()
 
   assert.equal(parseCalibration(new Uint8Array(20)), null);
 });
+
+// Frames captured from a real Light Master 4 (1 Sep 2026) - the regression anchor for the LM4 layout.
+const REAL_CAL = '002381843fb6c5853f0c05783f7bed8d3fe5fa843f5de5863ff6a0883f69ed983f0000803fa986993fc8edb13f0cf2';
+const REAL_MEAS = '00004600bd00e0014e020002740358031006d501130cf2';
+const hexBytes = (s) => s.match(/../g).map((b) => parseInt(b, 16));
+
+test('real LM4 calibration frame: nine little-endian factors', () => {
+  const p = hexBytes(REAL_CAL);
+  const c = parseCalibration(Uint8Array.from([...header(OPCODE.RES_CAL, p.length), ...p]));
+  assert.equal(c.model, 'lm4');
+  assert.equal(c.kSensor.length, 9);
+  const expected = [1.0352, 1.0451, 0.9688, 1.1088, 1.0389, 1.0539, 1.0674, 1.1947, 1.0];
+  c.kSensor.forEach((k, i) => assert.ok(Math.abs(k - expected[i]) < 1e-3, `k[${i}]=${k}`));
+});
+
+test('real LM4 measurement frame: channels, temperature and battery', () => {
+  const p = hexBytes(REAL_MEAS);
+  assert.equal(p.length, 23);
+  const m = parseMeasurement(Uint8Array.from([...header(OPCODE.RES_MEAS, p.length), ...p]));
+  assert.equal(m.model, 'lm4');
+  assert.deepEqual(m.raw, [70, 189, 224, 334, 512, 628, 856, 784, 1749]);
+  assert.equal(m.raw[8], Math.max(...m.raw), 'clear channel is the largest');
+  assert.equal(m.temperature, 27.5);
+  assert.equal(m.batteryRaw, 3314);
+});

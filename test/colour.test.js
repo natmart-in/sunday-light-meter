@@ -132,3 +132,18 @@ test('a Planckian SPD scores CRI 100', () => {
   const { Ra } = calcCri(2856, spd);
   assert.ok(Ra > 95, `Ra ${Ra}`);
 });
+
+test('real LM4 frames produce a sane desk-light reading', () => {
+  const hexBytes = (s) => s.match(/../g).map((b) => parseInt(b, 16));
+  const K = [1.0352, 1.0451, 0.9688, 1.1088, 1.0389, 1.0539, 1.0674, 1.1947, 1.0];
+  const raw = [70, 189, 224, 334, 512, 628, 856, 784, 1749];
+  const r = processMeasurement({ model: 'lm4', raw, batteryRaw: 3314, temperature: 27.5 }, { model: 'lm4', kSensor: K });
+  assert.ok(Math.abs(r.cct - 4144) < 3, `cct ${r.cct}`);
+  assert.ok(Math.abs(r.lux - 868.8) < 1, `lux ${r.lux}`);
+  assert.ok(Math.abs(r.duv + 0.0017) < 5e-4, `duv ${r.duv}`);
+  assert.ok(Math.abs(r.Ra - 97.3) < 0.2, `Ra ${r.Ra}`);
+  assert.ok(Math.abs(r.R[8] - 88.7) < 0.3, `R9 ${r.R[8]}`);
+  assert.equal(r.battery.percent, 100);
+  assert.equal(r.temperature, 27.5);
+  assert.equal(hexBytes('0cf2').length, 2);
+});
