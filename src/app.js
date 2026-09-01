@@ -4,9 +4,8 @@
 // Bluetooth (see meter.js) and renders the live readout, a reading log
 // with CSV export, and a diagnostics panel.
 
-import { OppleMeter, bluetoothSupport, processMeasurement } from './meter.js';
+import { OppleMeter, bluetoothSupport, processMeasurement, releasePermittedDevices, advertisingState } from './meter.js';
 import { cctToCss, wavelengthToCss } from './colour.js';
-import { lm4Process } from './lm4.js';
 
 const STORAGE = { log: 'slm.readings.v1' };
 const CAPTURE_SAMPLES = 8;
@@ -45,107 +44,6 @@ function esc(s) {
 }
 
 // ---------------------------------------------------------------------------
-// Simulated meter for browsers without Web Bluetooth / demos
-// ---------------------------------------------------------------------------
-
-const DEMO_K = [1.010141, 1.009422, 0.928753, 1.037585, 0.968898, 1.181077, 0.961893, 1.059147, 1.0];
-const DEMO_RAW = [654, 819, 855, 1152, 1330, 1719, 2595, 3715, 14571];
-const LM4_WL = [415, 445, 480, 515, 555, 590, 630, 680, 555];
-
-const demoTilt = (t) => DEMO_RAW.map((v, i) => v * (LM4_WL[i] / 555) ** t);
-
-/** Spectral tilt exponent that makes the LM4 pipeline read `targetK` from the demo spectrum. */
-function demoTiltFor(targetK) {
-  const cctOf = (t) => lm4Process(demoTilt(t).map((v, i) => v * DEMO_K[i])).cct;
-  // CCT falls monotonically with t over this range (~8000 K down to ~1800 K);
-  // stronger blue tilts push the matrix into negative XYZ and are not usable.
-  let lo = -1.8;
-  let hi = 8;
-  for (let i = 0; i < 26; i++) {
-    const mid = (lo + hi) / 2;
-    if (cctOf(mid) < targetK) hi = mid;
-    else lo = mid;
-  }
-  return (lo + hi) / 2;
-}
-
-class SimulatedMeter extends EventTarget {
-  constructor() {
-    super();
-    this.model = 'lm4';
-    this.calibration = { model: 'lm4', kSensor: DEMO_K };
-    this.timer = null;
-    this.t0 = Date.now();
-    this.targetK = 3000;
-    this.level = 0.35;
-    this.tilt = demoTiltFor(3000);
-    this.sceneTimer = null;
-  }
-
-  get connected() {
-    return !!this.timer;
-  }
-
-  modelName() {
-    return 'Simulated Light Master 4';
-  }
-
-  emit(type, detail) {
-    this.dispatchEvent(new CustomEvent(type, { detail }));
-  }
-
-  async connect() {
-    this.emit('log', { ts: Date.now(), level: 'info', message: 'simulated meter: no Bluetooth involved' });
-    this.emit('status', { state: 'connected', message: 'Simulated meter connected - readings are synthetic' });
-    return { name: 'Demo', model: 'lm4', modelName: this.modelName(), kSensor: DEMO_K };
-  }
-
-  setScene(k, level) {
-    if (k !== this.targetK) this.tilt = demoTiltFor(k);
-    this.targetK = k;
-    this.level = level;
-  }
-
-  startPolling(interval = 500) {
-    this.stopPolling();
-    // Wander through a few "lamps" so the demo has something to log.
-    const scenes = [
-      [3000, 0.35],
-      [2700, 0.2],
-      [4000, 0.6],
-      [6500, 0.9],
-      [5000, 0.5],
-    ];
-    let i = 0;
-    this.sceneTimer = setInterval(() => {
-      i = (i + 1) % scenes.length;
-      this.setScene(scenes[i][0], scenes[i][1]);
-    }, 20000);
-    const tick = () => {
-      const t = (Date.now() - this.t0) / 1000;
-      const scale = this.level * (1 + 0.01 * Math.sin(t / 3));
-      const raw = demoTilt(this.tilt + 0.01 * Math.sin(t / 7)).map((v) => Math.max(0, Math.round(v * scale * (1 + (Math.random() - 0.5) * 0.01))));
-      this.emit('reading', processMeasurement({ model: 'lm4', raw, batteryRaw: 3300, temperature: null }, this.calibration));
-      this.timer = setTimeout(tick, interval);
-    };
-    this.timer = setTimeout(tick, 0);
-  }
-
-  stopPolling() {
-    if (this.timer) clearTimeout(this.timer);
-    if (this.sceneTimer) clearInterval(this.sceneTimer);
-    this.timer = null;
-    this.sceneTimer = null;
-  }
-
-  disconnect() {
-    this.stopPolling();
-    this.emit('status', { state: 'disconnected', message: 'Disconnected' });
-    this.emit('disconnected', {});
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Markup
 // ---------------------------------------------------------------------------
 
@@ -157,7 +55,7 @@ function template() {
   <div class="slm__connect-left">
     <button class="slm__btn slm__btn--primary" type="button" data-el="connect">Connect light meter</button>
     <button class="slm__btn slm__btn--ghost" type="button" data-el="disconnect" hidden>Disconnect</button>
-    <button class="slm__btn slm__btn--link" type="button" data-el="demo">Try a simulated meter</button>
+    <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
   </div>
   <div class="slm__status" data-el="status">
     <span class="slm__dot" data-el="dot"></span>
@@ -167,6 +65,8 @@ function template() {
     <span class="slm__chip slm__chip--warn" data-el="uncal" hidden title="The meter did not return its calibration factors - readings are raw">uncalibrated</span>
   </div>
 </section>
+
+<div class="slm__notice slm__notice--reset" data-el="reset" hidden></div>
 
 <section class="slm__live" aria-label="Live reading">
   <div class="slm__sun-wrap">
@@ -215,7 +115,7 @@ function template() {
 </section>
 
 <footer class="slm__foot">
-  <p>Works with the Opple Light Master 3 and 4 over Web Bluetooth in Chrome, Edge and other Chromium browsers (desktop and Android). On iPhone and iPad use the <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a> browser. Readings use each meter's own factory calibration and the same maths as the Opple app; nothing leaves your browser. <button type="button" class="slm__btn slm__btn--link" data-el="diag-toggle">Diagnostics</button></p>
+  <p>Opple Light Master 3 and 4 · Chrome, Edge or Android (iPhone: <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a>) · nothing leaves your browser · <button type="button" class="slm__btn slm__btn--link" data-el="diag-toggle">Diagnostics</button></p>
 </footer>
 
 <section class="slm__diag" data-el="diag" hidden aria-label="Diagnostics">
@@ -248,7 +148,6 @@ export function mount(root) {
 
   const state = {
     meter: null,
-    simulated: false,
     live: null,
     rawHistory: [],
     capture: null, // { samples: [], resolve, reject }
@@ -296,7 +195,7 @@ export function mount(root) {
   els['diag-verbose'].checked = state.verbose;
   els['diag-verbose'].addEventListener('change', () => {
     state.verbose = els['diag-verbose'].checked;
-    if (state.meter && 'verbose' in state.meter) state.meter.verbose = state.verbose;
+    if (state.meter) state.meter.verbose = state.verbose;
   });
   els['diag-clear'].addEventListener('click', () => {
     state.diag = [];
@@ -307,7 +206,6 @@ export function mount(root) {
       await navigator.clipboard.writeText(diagText());
       toast('Diagnostics copied');
     } catch (_) {
-      // Fallback: select the text so it can be copied manually.
       const range = document.createRange();
       range.selectNodeContents(els['diag-log']);
       const sel = window.getSelection();
@@ -330,8 +228,9 @@ export function mount(root) {
     els.support.innerHTML =
       support.reason === 'insecure'
         ? 'Web Bluetooth only runs on secure (https) pages.'
-        : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad. You can still try the simulated meter below.';
+        : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad.';
     els.connect.disabled = true;
+    els.force.hidden = true;
   }
 
   // -- connection -----------------------------------------------------------
@@ -339,9 +238,10 @@ export function mount(root) {
     els['status-text'].textContent = message;
     els.dot.className = `slm__dot slm__dot--${stateName}`;
     const connected = stateName === 'connected';
-    els.connect.hidden = connected || stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating';
-    els.disconnect.hidden = els.connect.hidden === false;
-    els.demo.hidden = !els.connect.hidden ? false : true;
+    const busy = stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating' || stateName === 'requesting';
+    els.connect.hidden = connected || busy;
+    els.disconnect.hidden = !(connected || busy);
+    els.force.hidden = connected || busy || !support.ok;
     els.capture.disabled = !connected;
     if (stateName === 'disconnected') {
       els.model.hidden = true;
@@ -350,7 +250,7 @@ export function mount(root) {
     }
   }
 
-  function attach(meter, simulated) {
+  function attach(meter) {
     if (state.meter && state.meter !== meter) {
       try {
         state.meter.disconnect();
@@ -359,7 +259,6 @@ export function mount(root) {
       }
     }
     state.meter = meter;
-    state.simulated = simulated;
     state.rawHistory = [];
     meter.addEventListener('log', (e) => diag(e.detail.message, e.detail.level, e.detail.ts));
     meter.addEventListener('status', (e) => {
@@ -369,6 +268,7 @@ export function mount(root) {
         els.model.textContent = meter.modelName();
         els.model.hidden = false;
         els.uncal.hidden = !!(meter.calibration && meter.calibration.kSensor);
+        els.reset.hidden = true;
       }
       if (e.detail.state === 'warning') toast(e.detail.message, true);
     });
@@ -391,7 +291,7 @@ export function mount(root) {
 
   async function connectReal() {
     const meter = new OppleMeter({ verbose: state.verbose });
-    attach(meter, false);
+    attach(meter);
     els.connect.disabled = true;
     try {
       await meter.connect();
@@ -408,20 +308,54 @@ export function mount(root) {
     }
   }
 
-  function connectDemo() {
-    const meter = new SimulatedMeter();
-    attach(meter, true);
-    meter.connect().then(() => {
-      meter.startPolling(500);
-      els.model.textContent = 'Simulated LM4';
-      els.model.hidden = false;
-    });
-  }
-
   els.connect.addEventListener('click', connectReal);
-  els.demo.addEventListener('click', connectDemo);
   els.disconnect.addEventListener('click', () => {
     if (state.meter) state.meter.disconnect();
+  });
+
+  // -- force disconnect -----------------------------------------------------
+  async function forceDisconnect() {
+    els.force.disabled = true;
+    els.reset.hidden = false;
+    els.reset.innerHTML = 'Releasing…';
+    diag('force disconnect requested');
+    if (state.meter) {
+      try {
+        state.meter.disconnect();
+      } catch (_) {
+        // ignore
+      }
+    }
+    const res = await releasePermittedDevices({ forget: true, log: diag });
+    const meterLike = res.devices.filter((d) => /sigmesh|opple|master/i.test(d.name));
+    const lines = [];
+    if (!res.supported) {
+      lines.push('Released this tab’s own link. This browser cannot list previously allowed meters (in Chrome, <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code> turns that on), so anything another tab holds must be closed there.');
+    } else if (res.devices.length === 0) {
+      lines.push('This site holds no meter permissions, so it is not what has the meter.');
+    } else {
+      lines.push(`Released ${res.devices.length} previously allowed device${res.devices.length === 1 ? '' : 's'} (${res.devices.map((d) => esc(d.name)).join(', ')}) and cleared the permission - the next Connect will ask again.`);
+    }
+    // Is the meter free now? A connected Light Master does not advertise.
+    const probe = meterLike[0] || res.devices[0];
+    if (probe && typeof probe.device.watchAdvertisements === 'function') {
+      els.reset.innerHTML = `${lines.join(' ')}<br>Listening for the meter for 6 seconds…`;
+      const adv = await advertisingState(probe.device, 6000, diag);
+      if (adv === 'seen') lines.push(`<b>${esc(probe.name)} is advertising</b> - it is free. Press Connect.`);
+      else if (adv === 'silent') lines.push(`<b>${esc(probe.name)} is not advertising</b> - something still holds it, or it is asleep.`);
+      diag(`advertising check: ${adv}`);
+    }
+    lines.push(
+      'If it still shows as connected: <b>1</b> close every other tab with this page, <b>2</b> quit the Opple app on your phone, <b>3</b> on a Mac open the Bluetooth menu, click the meter and choose Disconnect (or turn Bluetooth off and on), <b>4</b> hold the meter’s power button to restart it. Nothing on a web page can reach a link held by another app or the meter itself.',
+    );
+    els.reset.innerHTML = lines.join(' ');
+    els.force.disabled = false;
+  }
+  els.force.addEventListener('click', () => {
+    forceDisconnect().catch((err) => {
+      diag(`force disconnect: ${err.message}`, 'error');
+      els.force.disabled = false;
+    });
   });
 
   // -- readings -------------------------------------------------------------
@@ -531,7 +465,6 @@ export function mount(root) {
         ts: Date.now(),
         label,
         model: r.model,
-        simulated: state.simulated,
         cct: r.cct,
         lux: r.lux,
         duv: r.duv,
@@ -559,7 +492,7 @@ export function mount(root) {
   });
 
   els.export.addEventListener('click', () => {
-    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter', 'simulated'];
+    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter'];
     const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
     for (const c of state.readings) {
@@ -578,7 +511,6 @@ export function mount(root) {
           c.eml === null || c.eml === undefined ? '' : c.eml.toFixed(0),
           c.cs === null || c.cs === undefined ? '' : c.cs.toFixed(3),
           c.model,
-          c.simulated ? 'yes' : 'no',
         ].join(','),
       );
     }
@@ -611,7 +543,7 @@ export function mount(root) {
           <td>${c.R ? fmt.fixed(c.R[8], 1) : '–'}</td>
           <td>${fmt.int(c.eml)}</td>
           <td class="slm__muted">${c.x.toFixed(4)}, ${c.y.toFixed(4)}</td>
-          <td class="slm__muted">${fmt.time(c.ts)}${c.simulated ? ' <small>sim</small>' : ''}</td>
+          <td class="slm__muted">${fmt.time(c.ts)}</td>
           <td><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
         </tr>`,
       )
@@ -630,8 +562,6 @@ export function mount(root) {
   renderReadings();
   renderDiag();
   setStatus('disconnected', 'Not connected');
-
-  if (params.get('demo') === '1') connectDemo();
   return { state, diagText };
 }
 

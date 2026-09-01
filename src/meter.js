@@ -41,6 +41,80 @@ export function bluetoothSupport() {
 
 const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ');
 
+/**
+ * Devices this site has been allowed to use before (Chrome's persistent
+ * Web Bluetooth permissions). Empty where the API is unavailable.
+ */
+export async function permittedDevices() {
+  if (typeof navigator === 'undefined' || !navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') return [];
+  try {
+    return await navigator.bluetooth.getDevices();
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Drop every GATT link (and cancel every pending connect) this page holds
+ * on previously permitted meters. Optionally revoke the permission too so
+ * the next Connect shows a fresh chooser. Returns what was done.
+ */
+export async function releasePermittedDevices({ forget = false, log = () => {} } = {}) {
+  const devices = await permittedDevices();
+  const result = { supported: typeof navigator !== 'undefined' && !!navigator.bluetooth && typeof navigator.bluetooth.getDevices === 'function', devices: [], released: 0, forgotten: 0 };
+  for (const d of devices) {
+    const name = d.name || '(no name)';
+    const wasConnected = !!(d.gatt && d.gatt.connected);
+    result.devices.push({ name, id: d.id, wasConnected, device: d });
+    try {
+      if (d.gatt) d.gatt.disconnect();
+      if (wasConnected) result.released += 1;
+      log(`released ${name}${wasConnected ? ' (was connected in this tab)' : ' (no link in this tab)'}`);
+    } catch (err) {
+      log(`release ${name}: ${err.message}`, 'warn');
+    }
+    if (forget && typeof d.forget === 'function') {
+      try {
+        await d.forget();
+        result.forgotten += 1;
+        log(`forgot ${name} - it will ask for permission again`);
+      } catch (err) {
+        log(`forget ${name}: ${err.message}`, 'warn');
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Listen for advertisements from a permitted device for `ms`. A Light
+ * Master that is connected to anything does not advertise, so "seen"
+ * means it is free to connect. Returns 'seen' | 'silent' | 'unsupported'.
+ */
+export async function advertisingState(device, ms = 6000, log = () => {}) {
+  if (!device || typeof device.watchAdvertisements !== 'function') return 'unsupported';
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const seen = new Promise((resolve) => {
+      device.addEventListener('advertisementreceived', (e) => {
+        log(`advertisement from ${device.name || '(no name)'} rssi=${e.rssi}`);
+        resolve('seen');
+      }, { once: true });
+    });
+    await device.watchAdvertisements({ signal: ctrl.signal });
+    const aborted = new Promise((resolve) => ctrl.signal.addEventListener('abort', () => resolve('silent'), { once: true }));
+    const state = await Promise.race([seen, aborted]);
+    return state;
+  } catch (err) {
+    log(`advertisement watch: ${err.message}`, 'warn');
+    return 'unsupported';
+  } finally {
+    clearTimeout(timer);
+    if (!ctrl.signal.aborted) ctrl.abort();
+  }
+}
+
 function withTimeout(promise, ms, what) {
   let timer;
   const timeout = new Promise((_, reject) => {

@@ -59,6 +59,8 @@
   background: var(--slm-cream-dark); border-left: 4px solid var(--slm-orange); border-radius: 10px;
   padding: 14px 18px; margin: 0 0 20px; font-size: 14.5px; color: var(--slm-dark);
 }
+.slm__notice--reset { line-height: 1.55; }
+.slm__notice--reset b { color: var(--slm-charcoal); }
 
 /* connection row */
 .slm__connect { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 22px; }

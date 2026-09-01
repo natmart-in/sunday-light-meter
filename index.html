@@ -30,10 +30,7 @@
     .intro h1 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(36px, 5.6vw, 56px); color: #292524; margin: 0; max-width: 18ch; }
     .intro h1 em { font-style: normal; background: linear-gradient(90deg, #f7d94c, #e86b3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .intro p { font-family: 'Inter', -apple-system, sans-serif; font-size: 17px; line-height: 1.6; color: #78716c; max-width: 62ch; margin: 16px 0 0; }
-    .about { max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; font-family: 'Inter', -apple-system, sans-serif; color: #78716c; font-size: 15px; line-height: 1.65; }
-    .about h2 { font-family: 'DM Sans', -apple-system, sans-serif; font-weight: 500; letter-spacing: -0.02em; color: #292524; font-size: 24px; margin: 0 0 10px; }
-    .about p { max-width: 70ch; margin: 0 0 12px; }
-    .about a { color: #c2582d; }
+    .intro p a { color: #c2582d; }
   </style>
 </head>
 <body>
@@ -43,16 +40,11 @@
   </header>
   <section class="intro">
     <h1>A light meter for your <em>Opple Light Master</em>, in the browser.</h1>
-    <p>Connect a Light Master 3 or 4 over Bluetooth and read lux, colour temperature, Duv, tint and colour rendering live - then log readings and export them as CSV. No app, no account, nothing leaves your browser.</p>
+    <p>Connect a Light Master 3 or 4 over Bluetooth for live lux, colour temperature, Duv, tint and CRI. Log readings, export CSV. Free and open source, by <a href="https://sundaylight.cc">Sunday</a>.</p>
   </section>
 
   <div id="sunday-light-meter"></div>
 
-  <section class="about">
-    <h2>Why this exists</h2>
-    <p>We are <a href="https://sundaylight.cc">Sunday</a>, a small team in London building a lamp that brings real daylight indoors. We use Light Masters on the bench every day, wanted the readings on a laptop without the phone app, and could not find a browser tool that supported the Light Master 4 - so we built one and open-sourced it. It uses the calibration stored in your meter and the same colour maths as the Opple app.</p>
-    <p>Curious what a light that reaches 10,000 lux at your desk looks like? <a href="https://sundaylight.cc">Have a look at the Sunday light</a>.</p>
-  </section>
 
   <script type="module" src="src/app.js"></script>
 </body>

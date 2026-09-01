@@ -9,8 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://sundaylight.cc/pages/light-meter"><b>Open the meter</b></a> ·
-  <a href="https://natmart-in.github.io/sunday-light-meter/?demo=1">try it with a simulated meter</a>
+  <a href="https://sundaylight.cc/pages/light-meter"><b>Open the meter</b></a>
 </p>
 
 <p align="center"><em>Built and open-sourced by <a href="https://sundaylight.cc">Sunday Light</a>. A side project, largely vibe-coded and not officially supported - issues and PRs welcome here. Not affiliated with Opple.</em></p>
@@ -26,7 +25,7 @@ The Light Master is the light meter most lighting hobbyists own. The excellent [
 - Supports both generations: the six-band **Light Master 3** and the AS7341-based **Light Master 4**, detected automatically.
 - Live readout twice a second; a disc glows with the measured colour; the bars are the raw sensor bands.
 - **Reading log**: average eight samples, label it ("bedroom lamp 2700 K"), keep it in the browser, download everything as CSV including R1-R14.
-- **Diagnostics** panel with a copyable connection log, for when Bluetooth misbehaves.
+- **Diagnostics** panel with a copyable connection log and a force-disconnect for a stuck meter.
 
 ## Using it
 
@@ -47,7 +46,7 @@ The Light Master is the light meter most lighting hobbyists own. The excellent [
 
 ### If it will not connect or keeps dropping
 
-- Only one thing can hold the meter: quit the Opple app on your phone and close any other tab with this page open.
+- Only one thing can hold the meter. Press **Meter stuck? Force disconnect**: it drops any link this site holds, clears the browser permission and then listens for the meter - if it is not advertising, something else still has it (the Opple app on your phone, another tab, or the meter itself). Quit the app, close other tabs, and on a Mac click the meter in the Bluetooth menu and choose Disconnect.
 - Power-cycle the meter and make sure it is charged; a meter that drops the link a second or two after connecting is usually one that is asleep, flat, or still attached to something else.
 - Open **Diagnostics** at the bottom of the page: every step of the connection is logged with timings and the exact error, and *Copy log* gives you something to paste into an issue.
 
@@ -70,7 +69,7 @@ No dependencies. Plain ES modules, tested with Node's built-in runner.
 ```bash
 npm test          # maths and protocol tests
 npm run build     # regenerates dist/ (committed; CI fails if it is stale)
-npm run serve     # http://localhost:8080/?demo=1 for a simulated meter, add &debug=1 for the log
+npm run serve     # http://localhost:8080/?debug=1 opens with the diagnostics log visible
 ```
 
 | File | What |
