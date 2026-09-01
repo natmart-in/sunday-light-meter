@@ -167,6 +167,7 @@
 .slm__x:hover { color: var(--slm-magenta); background: var(--slm-cream-dark); }
 
 .slm__foot { margin-top: 22px; font-size: 13px; color: var(--slm-muted); max-width: 82ch; }
+.slm__credits { margin-top: 6px; }
 
 /* diagnostics */
 .slm__diag { margin-top: 16px; background: var(--slm-charcoal); color: #e7e0d6; border-radius: 14px; padding: 12px 14px 14px; }
@@ -2106,6 +2107,7 @@ function template() {
 
 <footer class="slm__foot">
   <p>Opple Light Master 3 and 4 · Chrome, Edge or Android (iPhone: <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" rel="noopener" target="_blank">Bluefy</a>) · <a href="https://github.com/natmart-in/sunday-light-meter" rel="noopener" target="_blank">Open source on GitHub</a> · <button type="button" class="slm__btn slm__btn--link" data-el="diag-toggle">Diagnostics</button></p>
+  <p class="slm__credits">Built on <a href="https://github.com/OlliV/open-light-master" rel="noopener" target="_blank">open-light-master</a> (Light Master 3 protocol and maths) and <a href="https://github.com/gabrielebaudo/opple-bridge" rel="noopener" target="_blank">opple-bridge</a> (Light Master 4 payloads and the app's coefficients), with notes from <a href="https://github.com/Geomaniac15/tag-tester" rel="noopener" target="_blank">tag-tester</a>. Not affiliated with Opple.</p>
 </footer>
 
 <section class="slm__diag" data-el="diag" hidden aria-label="Diagnostics">

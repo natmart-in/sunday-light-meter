@@ -63,4 +63,9 @@ Nordic UART service `6e400001-b5a3-f393-e0a9-e50e24dcca9e`; commands are written
 
 ## Credits
 
-[OlliV/open-light-master](https://github.com/OlliV/open-light-master) (LM3 protocol and maths), [gabrielebaudo/opple-bridge](https://github.com/gabrielebaudo/opple-bridge) (LM4 layout and app coefficients), [Geomaniac15/tag-tester](https://github.com/Geomaniac15/tag-tester) (LM4 notes).
+- [OlliV/open-light-master](https://github.com/OlliV/open-light-master) - reverse-engineered the Light Master 3 protocol and its colour maths; the LM3 pipeline here follows it.
+- [gabrielebaudo/opple-bridge](https://github.com/gabrielebaudo/opple-bridge) - Light Master 4 payload layouts and the official app's colour coefficients; the LM4 pipeline here uses them.
+- [Geomaniac15/tag-tester](https://github.com/Geomaniac15/tag-tester) - Light Master 4 protocol notes.
+- Colour science: McCamy (CCT), Ohno 2014 / ANSI C78.377 (Duv), CIE 13.3-1995 (CRI), Adobe DNG (tint).
+
+Not affiliated with Opple. Opple and Light Master are trademarks of their owner.

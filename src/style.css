@@ -149,6 +149,7 @@
 .slm__x:hover { color: var(--slm-magenta); background: var(--slm-cream-dark); }
 
 .slm__foot { margin-top: 22px; font-size: 13px; color: var(--slm-muted); max-width: 82ch; }
+.slm__credits { margin-top: 6px; }
 
 /* diagnostics */
 .slm__diag { margin-top: 16px; background: var(--slm-charcoal); color: #e7e0d6; border-radius: 14px; padding: 12px 14px 14px; }
