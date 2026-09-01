@@ -46,6 +46,7 @@ The Light Master is the light meter most lighting hobbyists own. The excellent [
 
 ### If it will not connect or keeps dropping
 
+- The chooser only lists devices that look like a Light Master (by name or UART service) - that is why nothing else shows up. If your meter advertises under an odd name, use **Not listed? Show all devices**.
 - Only one thing can hold the meter. Press **Meter stuck? Force disconnect**: it drops any link this site holds, clears the browser permission and then listens for the meter - if it is not advertising, something else still has it (the Opple app on your phone, another tab, or the meter itself). Quit the app, close other tabs, and on a Mac click the meter in the Bluetooth menu and choose Disconnect.
 - Power-cycle the meter and make sure it is charged; a meter that drops the link a second or two after connecting is usually one that is asleep, flat, or still attached to something else.
 - Open **Diagnostics** at the bottom of the page: every step of the connection is logged with timings and the exact error, and *Copy log* gives you something to paste into an issue.

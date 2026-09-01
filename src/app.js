@@ -55,6 +55,7 @@ function template() {
   <div class="slm__connect-left">
     <button class="slm__btn slm__btn--primary" type="button" data-el="connect">Connect light meter</button>
     <button class="slm__btn slm__btn--ghost" type="button" data-el="disconnect" hidden>Disconnect</button>
+    <button class="slm__btn slm__btn--link" type="button" data-el="connect-all" title="Chrome only lists devices that look like a Light Master; this shows everything in range">Not listed? Show all devices</button>
     <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
   </div>
   <div class="slm__status" data-el="status">
@@ -231,6 +232,7 @@ export function mount(root) {
         : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad.';
     els.connect.disabled = true;
     els.force.hidden = true;
+    els['connect-all'].hidden = true;
   }
 
   // -- connection -----------------------------------------------------------
@@ -240,6 +242,7 @@ export function mount(root) {
     const connected = stateName === 'connected';
     const busy = stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating' || stateName === 'requesting';
     els.connect.hidden = connected || busy;
+    els['connect-all'].hidden = connected || busy || !support.ok;
     els.disconnect.hidden = !(connected || busy);
     els.force.hidden = connected || busy || !support.ok;
     els.capture.disabled = !connected;
@@ -289,12 +292,13 @@ export function mount(root) {
     });
   }
 
-  async function connectReal() {
+  async function connectReal(showAll = false) {
     const meter = new OppleMeter({ verbose: state.verbose });
     attach(meter);
     els.connect.disabled = true;
+    els['connect-all'].disabled = true;
     try {
-      await meter.connect();
+      await meter.connect({ showAll });
       meter.startPolling(500);
       toast(`${meter.modelName()} connected${meter.calibration ? ' - calibration loaded' : ''}`);
     } catch (err) {
@@ -305,10 +309,12 @@ export function mount(root) {
       if (!cancelled) toast(`${err.message}. Open Diagnostics for details.`, true);
     } finally {
       els.connect.disabled = !support.ok;
+      els['connect-all'].disabled = !support.ok;
     }
   }
 
-  els.connect.addEventListener('click', connectReal);
+  els.connect.addEventListener('click', () => connectReal(false));
+  els['connect-all'].addEventListener('click', () => connectReal(true));
   els.disconnect.addEventListener('click', () => {
     if (state.meter) state.meter.disconnect();
   });
@@ -346,7 +352,7 @@ export function mount(root) {
       diag(`advertising check: ${adv}`);
     }
     lines.push(
-      'If it still shows as connected: <b>1</b> close every other tab with this page, <b>2</b> quit the Opple app on your phone, <b>3</b> on a Mac open the Bluetooth menu, click the meter and choose Disconnect (or turn Bluetooth off and on), <b>4</b> hold the meter’s power button to restart it. Nothing on a web page can reach a link held by another app or the meter itself.',
+      'If it still shows as connected or “Paired” in the chooser: <b>1</b> close every other tab with this page, then quit the browser completely (on a Mac, ⌘Q - a stale link lives inside the browser process), <b>2</b> quit the Opple app on your phone, <b>3</b> turn Bluetooth off and on, <b>4</b> hold the meter’s power button to restart it. A web page cannot reach a link held by another app or the meter itself.',
     );
     els.reset.innerHTML = lines.join(' ');
     els.force.disabled = false;

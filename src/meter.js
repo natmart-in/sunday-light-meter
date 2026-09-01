@@ -24,6 +24,12 @@ export const REQUEST_OPTIONS = {
   optionalServices: [NUS_SERVICE, 'battery_service'],
 };
 
+/** Fallback chooser for meters advertising under an unexpected name: every device, no filter. */
+export const REQUEST_OPTIONS_ALL = {
+  acceptAllDevices: true,
+  optionalServices: [NUS_SERVICE, 'battery_service'],
+};
+
 const CONNECT_TIMEOUT_MS = 15000;
 const COMMAND_TIMEOUT_MS = 3000;
 const MAX_CONSECUTIVE_TIMEOUTS = 3;
@@ -181,11 +187,12 @@ export class OppleMeter extends EventTarget {
   }
 
   /** Prompt for a meter and open the session. Must run inside a user gesture. */
-  async connect() {
+  async connect({ showAll = false } = {}) {
     const support = bluetoothSupport();
     if (!support.ok) throw new Error(support.reason === 'insecure' ? 'Web Bluetooth needs an https page' : 'This browser has no Web Bluetooth (use Chrome or Edge)');
-    this.status('requesting', 'Choose your Light Master in the browser dialog');
-    const device = await navigator.bluetooth.requestDevice(REQUEST_OPTIONS);
+    this.status('requesting', showAll ? 'Choose your meter from all Bluetooth devices' : 'Choose your Light Master in the browser dialog');
+    const device = await navigator.bluetooth.requestDevice(showAll ? REQUEST_OPTIONS_ALL : REQUEST_OPTIONS);
+    if (device.gatt && device.gatt.connected) this.log('browser already reports this device as connected before we asked - a stale link from an earlier session', 'warn');
     this.device = device;
     this.manualDisconnect = false;
     this.log(`chosen device "${device.name || '(no name)'}" id=${device.id}`);
@@ -195,6 +202,9 @@ export class OppleMeter extends EventTarget {
     } catch (err) {
       this.log(`session failed: ${err.name || ''} ${err.message}`, 'error');
       this.teardown();
+      // Never leave a half-open link behind: it would keep the meter busy and
+      // show up as "Paired"/connected in the next chooser.
+      this.cancelPendingConnect();
       throw err;
     }
     return this.info();
@@ -387,9 +397,13 @@ export class OppleMeter extends EventTarget {
     this.pollTimer = null;
   }
 
+  /** Drop the GATT link if up, and cancel a pending connect if not. Safe to call any time. */
   cancelPendingConnect() {
     try {
-      if (this.device && this.device.gatt) this.device.gatt.disconnect();
+      if (this.device && this.device.gatt) {
+        if (this.device.gatt.connected) this.log('dropping the GATT link');
+        this.device.gatt.disconnect();
+      }
     } catch (_) {
       // ignore
     }
@@ -446,6 +460,7 @@ export class OppleMeter extends EventTarget {
         } catch (err) {
           this.log(`reconnect ${attempt} failed: ${err.message}`, 'warn');
           this.teardown();
+          this.cancelPendingConnect();
         }
       }
     } finally {

@@ -1528,6 +1528,12 @@ const REQUEST_OPTIONS = {
   optionalServices: [NUS_SERVICE, 'battery_service'],
 };
 
+/** Fallback chooser for meters advertising under an unexpected name: every device, no filter. */
+const REQUEST_OPTIONS_ALL = {
+  acceptAllDevices: true,
+  optionalServices: [NUS_SERVICE, 'battery_service'],
+};
+
 const CONNECT_TIMEOUT_MS = 15000;
 const COMMAND_TIMEOUT_MS = 3000;
 const MAX_CONSECUTIVE_TIMEOUTS = 3;
@@ -1685,11 +1691,12 @@ class OppleMeter extends EventTarget {
   }
 
   /** Prompt for a meter and open the session. Must run inside a user gesture. */
-  async connect() {
+  async connect({ showAll = false } = {}) {
     const support = bluetoothSupport();
     if (!support.ok) throw new Error(support.reason === 'insecure' ? 'Web Bluetooth needs an https page' : 'This browser has no Web Bluetooth (use Chrome or Edge)');
-    this.status('requesting', 'Choose your Light Master in the browser dialog');
-    const device = await navigator.bluetooth.requestDevice(REQUEST_OPTIONS);
+    this.status('requesting', showAll ? 'Choose your meter from all Bluetooth devices' : 'Choose your Light Master in the browser dialog');
+    const device = await navigator.bluetooth.requestDevice(showAll ? REQUEST_OPTIONS_ALL : REQUEST_OPTIONS);
+    if (device.gatt && device.gatt.connected) this.log('browser already reports this device as connected before we asked - a stale link from an earlier session', 'warn');
     this.device = device;
     this.manualDisconnect = false;
     this.log(`chosen device "${device.name || '(no name)'}" id=${device.id}`);
@@ -1699,6 +1706,9 @@ class OppleMeter extends EventTarget {
     } catch (err) {
       this.log(`session failed: ${err.name || ''} ${err.message}`, 'error');
       this.teardown();
+      // Never leave a half-open link behind: it would keep the meter busy and
+      // show up as "Paired"/connected in the next chooser.
+      this.cancelPendingConnect();
       throw err;
     }
     return this.info();
@@ -1891,9 +1901,13 @@ class OppleMeter extends EventTarget {
     this.pollTimer = null;
   }
 
+  /** Drop the GATT link if up, and cancel a pending connect if not. Safe to call any time. */
   cancelPendingConnect() {
     try {
-      if (this.device && this.device.gatt) this.device.gatt.disconnect();
+      if (this.device && this.device.gatt) {
+        if (this.device.gatt.connected) this.log('dropping the GATT link');
+        this.device.gatt.disconnect();
+      }
     } catch (_) {
       // ignore
     }
@@ -1950,6 +1964,7 @@ class OppleMeter extends EventTarget {
         } catch (err) {
           this.log(`reconnect ${attempt} failed: ${err.message}`, 'warn');
           this.teardown();
+          this.cancelPendingConnect();
         }
       }
     } finally {
@@ -2025,6 +2040,7 @@ function template() {
   <div class="slm__connect-left">
     <button class="slm__btn slm__btn--primary" type="button" data-el="connect">Connect light meter</button>
     <button class="slm__btn slm__btn--ghost" type="button" data-el="disconnect" hidden>Disconnect</button>
+    <button class="slm__btn slm__btn--link" type="button" data-el="connect-all" title="Chrome only lists devices that look like a Light Master; this shows everything in range">Not listed? Show all devices</button>
     <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
   </div>
   <div class="slm__status" data-el="status">
@@ -2201,6 +2217,7 @@ function mount(root) {
         : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad.';
     els.connect.disabled = true;
     els.force.hidden = true;
+    els['connect-all'].hidden = true;
   }
 
   // -- connection -----------------------------------------------------------
@@ -2210,6 +2227,7 @@ function mount(root) {
     const connected = stateName === 'connected';
     const busy = stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating' || stateName === 'requesting';
     els.connect.hidden = connected || busy;
+    els['connect-all'].hidden = connected || busy || !support.ok;
     els.disconnect.hidden = !(connected || busy);
     els.force.hidden = connected || busy || !support.ok;
     els.capture.disabled = !connected;
@@ -2259,12 +2277,13 @@ function mount(root) {
     });
   }
 
-  async function connectReal() {
+  async function connectReal(showAll = false) {
     const meter = new OppleMeter({ verbose: state.verbose });
     attach(meter);
     els.connect.disabled = true;
+    els['connect-all'].disabled = true;
     try {
-      await meter.connect();
+      await meter.connect({ showAll });
       meter.startPolling(500);
       toast(`${meter.modelName()} connected${meter.calibration ? ' - calibration loaded' : ''}`);
     } catch (err) {
@@ -2275,10 +2294,12 @@ function mount(root) {
       if (!cancelled) toast(`${err.message}. Open Diagnostics for details.`, true);
     } finally {
       els.connect.disabled = !support.ok;
+      els['connect-all'].disabled = !support.ok;
     }
   }
 
-  els.connect.addEventListener('click', connectReal);
+  els.connect.addEventListener('click', () => connectReal(false));
+  els['connect-all'].addEventListener('click', () => connectReal(true));
   els.disconnect.addEventListener('click', () => {
     if (state.meter) state.meter.disconnect();
   });
@@ -2316,7 +2337,7 @@ function mount(root) {
       diag(`advertising check: ${adv}`);
     }
     lines.push(
-      'If it still shows as connected: <b>1</b> close every other tab with this page, <b>2</b> quit the Opple app on your phone, <b>3</b> on a Mac open the Bluetooth menu, click the meter and choose Disconnect (or turn Bluetooth off and on), <b>4</b> hold the meter’s power button to restart it. Nothing on a web page can reach a link held by another app or the meter itself.',
+      'If it still shows as connected or “Paired” in the chooser: <b>1</b> close every other tab with this page, then quit the browser completely (on a Mac, ⌘Q - a stale link lives inside the browser process), <b>2</b> quit the Opple app on your phone, <b>3</b> turn Bluetooth off and on, <b>4</b> hold the meter’s power button to restart it. A web page cannot reach a link held by another app or the meter itself.',
     );
     els.reset.innerHTML = lines.join(' ');
     els.force.disabled = false;
