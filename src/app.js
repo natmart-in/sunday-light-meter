@@ -55,8 +55,6 @@ function template() {
   <div class="slm__connect-left">
     <button class="slm__btn slm__btn--primary" type="button" data-el="connect">Connect light meter</button>
     <button class="slm__btn slm__btn--ghost" type="button" data-el="disconnect" hidden>Disconnect</button>
-    <button class="slm__btn slm__btn--link" type="button" data-el="connect-all" title="Chrome only lists devices that look like a Light Master; this shows everything in range">Not listed? Show all devices</button>
-    <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
   </div>
   <div class="slm__status" data-el="status">
     <span class="slm__dot" data-el="dot"></span>
@@ -65,6 +63,14 @@ function template() {
     <span class="slm__chip" data-el="battery" hidden></span>
     <span class="slm__chip slm__chip--warn" data-el="uncal" hidden title="The meter did not return its calibration factors - readings are raw">uncalibrated</span>
   </div>
+  <details class="slm__help" data-el="help">
+    <summary class="slm__help-toggle">Trouble connecting?</summary>
+    <div class="slm__help-panel">
+      <button class="slm__btn slm__btn--link" type="button" data-el="connect-all">Not listed? Show all devices</button>
+      <p class="slm__help-note">Chrome only lists devices that look like a Light Master; this shows everything in range.</p>
+      <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
+    </div>
+  </details>
 </section>
 
 <div class="slm__notice slm__notice--reset" data-el="reset" hidden></div>
@@ -232,8 +238,7 @@ export function mount(root) {
         ? 'Web Bluetooth only runs on secure (https) pages.'
         : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad.';
     els.connect.disabled = true;
-    els.force.hidden = true;
-    els['connect-all'].hidden = true;
+    els.help.hidden = true;
   }
 
   // -- connection -----------------------------------------------------------
@@ -243,9 +248,13 @@ export function mount(root) {
     const connected = stateName === 'connected';
     const busy = stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating' || stateName === 'requesting';
     els.connect.hidden = connected || busy;
-    els['connect-all'].hidden = connected || busy || !support.ok;
     els.disconnect.hidden = !(connected || busy);
-    els.force.hidden = connected || busy || !support.ok;
+    // The fallbacks only help while disconnected, so the whole "Trouble
+    // connecting?" disclosure goes away once a meter is connected or an attempt
+    // is in flight. A failed attempt lands back on 'disconnected', which brings
+    // it back - still open, so the fallbacks are one click away.
+    els.help.hidden = connected || busy || !support.ok;
+    if (connected) els.help.open = false;
     els.capture.disabled = !connected;
     if (stateName === 'disconnected') {
       els.model.hidden = true;
@@ -449,12 +458,15 @@ export function mount(root) {
       return;
     }
     const max = Math.max(1e-9, ...r.bands);
-    host.innerHTML = r.bandWavelengths
+    const bars = r.bandWavelengths
       .map((wl, i) => {
         const h = Math.max(2, (100 * r.bands[i]) / max);
         return `<div class="slm__band" title="${wl} nm"><div class="slm__band-bar" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div><span>${wl}</span></div>`;
       })
       .join('');
+    // The caption is rendered inside the host so `.slm__spectrum:empty` still
+    // collapses the whole row when there is no reading.
+    host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div>`;
   }
 
   // -- reading log ----------------------------------------------------------

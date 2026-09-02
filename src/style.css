@@ -69,6 +69,23 @@
 /* connection row */
 .slm__connect { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 22px; }
 .slm__connect-left { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+/* "Trouble connecting?" disclosure: a quiet link on its own row under the
+   primary button, holding the two fallbacks that used to sit in the row. */
+.slm__help { flex: 0 0 100%; }
+.slm__help-toggle {
+  display: inline-block; list-style: none; cursor: pointer;
+  font-size: 13.5px; color: var(--slm-gray); text-decoration: underline; text-underline-offset: 3px; padding: 2px 0;
+}
+.slm__help-toggle::-webkit-details-marker { display: none; }
+.slm__help-toggle:hover { color: var(--slm-orange-dark); }
+.slm__help-toggle:focus-visible { outline: 2px solid var(--slm-orange); outline-offset: 3px; border-radius: 4px; }
+.slm__help-panel {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  max-width: 52ch; margin-top: 10px; padding: 14px 18px;
+  background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: 12px;
+}
+.slm .slm__help-note { font-size: 12.5px; line-height: 1.5; color: var(--slm-gray); margin: -6px 0 0; }
 .slm__status { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--slm-gray); flex-wrap: wrap; }
 .slm__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--slm-muted); flex: none; transition: background 0.3s, box-shadow 0.3s; }
 .slm__dot--connected { background: var(--slm-ok); box-shadow: 0 0 0 4px rgba(90, 158, 111, 0.18); }
@@ -119,10 +136,18 @@
 .slm__metrics dd.slm__small { font-size: 15px; font-family: var(--slm-body); font-weight: 500; }
 .slm__metrics dd.slm__rlist { font-size: 12px; font-family: var(--slm-body); font-weight: 400; color: var(--slm-gray); letter-spacing: 0.02em; word-spacing: 0.15em; line-height: 1.5; }
 
-.slm__spectrum { grid-area: spectrum; display: flex; gap: 8px; align-items: flex-end; height: 74px; padding-top: 12px; border-top: 1.5px solid var(--slm-cream-dark); }
+.slm__spectrum { grid-area: spectrum; padding-top: 12px; border-top: 1.5px solid var(--slm-cream-dark); }
 .slm__spectrum:empty { display: none; }
+.slm__spectrum-caption { font-size: 11px; line-height: 1.4; letter-spacing: 0.02em; color: var(--slm-muted); text-align: left; margin: 0 0 8px; }
+.slm__spectrum-bars { display: flex; gap: 8px; align-items: flex-end; height: 74px; }
 .slm__band { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
 .slm__band-bar { width: 100%; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
+/* The host Shopify theme (Dawn) ships a global `div:empty { display: none }`
+   reset. The band bars are empty divs sized by an inline height, so without a
+   more specific rule every bar vanishes on sundaylight.cc and only the
+   wavelength labels are left. Audited the rest of the template: every other
+   div/section/p/dl is either filled before it is shown or has child elements. */
+.slm .slm__band-bar { display: block; }
 .slm__band span { font-size: 10px; color: var(--slm-muted); letter-spacing: 0.04em; }
 
 /* reading log */
@@ -187,6 +212,12 @@
   .slm__log { padding: 18px 16px 20px; }
   .slm__connect { flex-direction: column; align-items: stretch; }
   .slm__btn--primary { text-align: center; }
+  /* Stacked column: a 100% flex-basis would size on the block axis, so reset it
+     and order the toggle directly under the primary button. */
+  .slm__connect-left { order: 1; }
+  .slm__help { order: 2; flex: 0 1 auto; }
+  .slm__status { order: 3; }
+  .slm__help-panel { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .slm__sun--lit, .slm__dot--connecting, .slm__dot--requesting, .slm__dot--calibrating, .slm__dot--reconnecting { animation: none; }

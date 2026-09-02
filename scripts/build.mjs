@@ -57,9 +57,10 @@ const liquid = `{%- comment -%}
 {% raw %}
 <style>
 .sunday-light-meter-section { padding: 48px 0 24px; }
+@media (max-width: 560px) { .sunday-light-meter-section { padding-top: 28px; } }
 .sunday-light-meter-section__inner { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
 .sunday-light-meter-section__title { font-family: var(--sunday-heading, 'DM Sans', sans-serif); font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(34px, 5vw, 52px); margin: 0 0 12px; }
-.sunday-light-meter-section__text { font-family: var(--sunday-body, 'Inter', sans-serif); font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 0 0 28px; }
+.sunday-light-meter-section__text { font-family: var(--sunday-body, 'Inter', sans-serif); font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 0 0 20px; }
 .sunday-light-meter-section .slm { padding-left: 0; padding-right: 0; }
 ${css}
 </style>

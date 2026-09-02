@@ -17,9 +17,10 @@
 {% raw %}
 <style>
 .sunday-light-meter-section { padding: 48px 0 24px; }
+@media (max-width: 560px) { .sunday-light-meter-section { padding-top: 28px; } }
 .sunday-light-meter-section__inner { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
 .sunday-light-meter-section__title { font-family: var(--sunday-heading, 'DM Sans', sans-serif); font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(34px, 5vw, 52px); margin: 0 0 12px; }
-.sunday-light-meter-section__text { font-family: var(--sunday-body, 'Inter', sans-serif); font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 0 0 28px; }
+.sunday-light-meter-section__text { font-family: var(--sunday-body, 'Inter', sans-serif); font-size: 17px; line-height: 1.6; color: #78716c; max-width: 60ch; margin: 0 0 20px; }
 .sunday-light-meter-section .slm { padding-left: 0; padding-right: 0; }
 /* Light Meter - scoped under .slm so it can sit inside the Sunday Shopify theme. */
 
@@ -92,6 +93,23 @@
 /* connection row */
 .slm__connect { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 22px; }
 .slm__connect-left { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+/* "Trouble connecting?" disclosure: a quiet link on its own row under the
+   primary button, holding the two fallbacks that used to sit in the row. */
+.slm__help { flex: 0 0 100%; }
+.slm__help-toggle {
+  display: inline-block; list-style: none; cursor: pointer;
+  font-size: 13.5px; color: var(--slm-gray); text-decoration: underline; text-underline-offset: 3px; padding: 2px 0;
+}
+.slm__help-toggle::-webkit-details-marker { display: none; }
+.slm__help-toggle:hover { color: var(--slm-orange-dark); }
+.slm__help-toggle:focus-visible { outline: 2px solid var(--slm-orange); outline-offset: 3px; border-radius: 4px; }
+.slm__help-panel {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  max-width: 52ch; margin-top: 10px; padding: 14px 18px;
+  background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: 12px;
+}
+.slm .slm__help-note { font-size: 12.5px; line-height: 1.5; color: var(--slm-gray); margin: -6px 0 0; }
 .slm__status { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--slm-gray); flex-wrap: wrap; }
 .slm__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--slm-muted); flex: none; transition: background 0.3s, box-shadow 0.3s; }
 .slm__dot--connected { background: var(--slm-ok); box-shadow: 0 0 0 4px rgba(90, 158, 111, 0.18); }
@@ -142,10 +160,18 @@
 .slm__metrics dd.slm__small { font-size: 15px; font-family: var(--slm-body); font-weight: 500; }
 .slm__metrics dd.slm__rlist { font-size: 12px; font-family: var(--slm-body); font-weight: 400; color: var(--slm-gray); letter-spacing: 0.02em; word-spacing: 0.15em; line-height: 1.5; }
 
-.slm__spectrum { grid-area: spectrum; display: flex; gap: 8px; align-items: flex-end; height: 74px; padding-top: 12px; border-top: 1.5px solid var(--slm-cream-dark); }
+.slm__spectrum { grid-area: spectrum; padding-top: 12px; border-top: 1.5px solid var(--slm-cream-dark); }
 .slm__spectrum:empty { display: none; }
+.slm__spectrum-caption { font-size: 11px; line-height: 1.4; letter-spacing: 0.02em; color: var(--slm-muted); text-align: left; margin: 0 0 8px; }
+.slm__spectrum-bars { display: flex; gap: 8px; align-items: flex-end; height: 74px; }
 .slm__band { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
 .slm__band-bar { width: 100%; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
+/* The host Shopify theme (Dawn) ships a global `div:empty { display: none }`
+   reset. The band bars are empty divs sized by an inline height, so without a
+   more specific rule every bar vanishes on sundaylight.cc and only the
+   wavelength labels are left. Audited the rest of the template: every other
+   div/section/p/dl is either filled before it is shown or has child elements. */
+.slm .slm__band-bar { display: block; }
 .slm__band span { font-size: 10px; color: var(--slm-muted); letter-spacing: 0.04em; }
 
 /* reading log */
@@ -210,6 +236,12 @@
   .slm__log { padding: 18px 16px 20px; }
   .slm__connect { flex-direction: column; align-items: stretch; }
   .slm__btn--primary { text-align: center; }
+  /* Stacked column: a 100% flex-basis would size on the block axis, so reset it
+     and order the toggle directly under the primary button. */
+  .slm__connect-left { order: 1; }
+  .slm__help { order: 2; flex: 0 1 auto; }
+  .slm__status { order: 3; }
+  .slm__help-panel { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .slm__sun--lit, .slm__dot--connecting, .slm__dot--requesting, .slm__dot--calibrating, .slm__dot--reconnecting { animation: none; }
@@ -2027,8 +2059,6 @@ function template() {
   <div class="slm__connect-left">
     <button class="slm__btn slm__btn--primary" type="button" data-el="connect">Connect light meter</button>
     <button class="slm__btn slm__btn--ghost" type="button" data-el="disconnect" hidden>Disconnect</button>
-    <button class="slm__btn slm__btn--link" type="button" data-el="connect-all" title="Chrome only lists devices that look like a Light Master; this shows everything in range">Not listed? Show all devices</button>
-    <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
   </div>
   <div class="slm__status" data-el="status">
     <span class="slm__dot" data-el="dot"></span>
@@ -2037,6 +2067,14 @@ function template() {
     <span class="slm__chip" data-el="battery" hidden></span>
     <span class="slm__chip slm__chip--warn" data-el="uncal" hidden title="The meter did not return its calibration factors - readings are raw">uncalibrated</span>
   </div>
+  <details class="slm__help" data-el="help">
+    <summary class="slm__help-toggle">Trouble connecting?</summary>
+    <div class="slm__help-panel">
+      <button class="slm__btn slm__btn--link" type="button" data-el="connect-all">Not listed? Show all devices</button>
+      <p class="slm__help-note">Chrome only lists devices that look like a Light Master; this shows everything in range.</p>
+      <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
+    </div>
+  </details>
 </section>
 
 <div class="slm__notice slm__notice--reset" data-el="reset" hidden></div>
@@ -2204,8 +2242,7 @@ function mount(root) {
         ? 'Web Bluetooth only runs on secure (https) pages.'
         : 'This browser cannot talk to Bluetooth devices. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer or Android phone, or in the <b>Bluefy</b> browser on iPhone/iPad.';
     els.connect.disabled = true;
-    els.force.hidden = true;
-    els['connect-all'].hidden = true;
+    els.help.hidden = true;
   }
 
   // -- connection -----------------------------------------------------------
@@ -2215,9 +2252,13 @@ function mount(root) {
     const connected = stateName === 'connected';
     const busy = stateName === 'reconnecting' || stateName === 'connecting' || stateName === 'calibrating' || stateName === 'requesting';
     els.connect.hidden = connected || busy;
-    els['connect-all'].hidden = connected || busy || !support.ok;
     els.disconnect.hidden = !(connected || busy);
-    els.force.hidden = connected || busy || !support.ok;
+    // The fallbacks only help while disconnected, so the whole "Trouble
+    // connecting?" disclosure goes away once a meter is connected or an attempt
+    // is in flight. A failed attempt lands back on 'disconnected', which brings
+    // it back - still open, so the fallbacks are one click away.
+    els.help.hidden = connected || busy || !support.ok;
+    if (connected) els.help.open = false;
     els.capture.disabled = !connected;
     if (stateName === 'disconnected') {
       els.model.hidden = true;
@@ -2421,12 +2462,15 @@ function mount(root) {
       return;
     }
     const max = Math.max(1e-9, ...r.bands);
-    host.innerHTML = r.bandWavelengths
+    const bars = r.bandWavelengths
       .map((wl, i) => {
         const h = Math.max(2, (100 * r.bands[i]) / max);
         return `<div class="slm__band" title="${wl} nm"><div class="slm__band-bar" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div><span>${wl}</span></div>`;
       })
       .join('');
+    // The caption is rendered inside the host so `.slm__spectrum:empty` still
+    // collapses the whole row when there is no reading.
+    host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div>`;
   }
 
   // -- reading log ----------------------------------------------------------
