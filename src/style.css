@@ -123,7 +123,7 @@
 .slm__spectrum:empty { display: none; }
 .slm__band { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
 .slm__band-bar { width: 100%; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
-.slm__band span { font-size: 10px; color: var(--slm-muted); letter-spacing: 0.04em; }
+.slm__band span { font-size: 11px; color: var(--slm-muted); letter-spacing: 0.04em; }
 
 /* reading log */
 .slm__log { background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius); padding: 22px 26px 24px; }
@@ -179,6 +179,40 @@
   .slm__live { grid-template-columns: 150px minmax(0, 1fr); grid-template-areas: 'sun hero' 'metrics metrics' 'spectrum spectrum'; padding: 24px; gap: 18px 22px; }
   .slm__sun { width: 128px; height: 128px; }
 }
+/* Reading log as cards: below this width the table is a horizontal scroller that
+   shows three of its eleven columns, so each row becomes a card instead and the
+   column names move into the cells (::before, from data-th). */
+@media (max-width: 640px) {
+  .slm__table-wrap { overflow: visible; background: transparent; border: 0; border-radius: 0; }
+  .slm__table { display: block; width: 100%; min-width: 0; font-size: 14px; }
+  .slm__table thead { display: none; }
+  .slm__table tbody { display: block; }
+  .slm__table tr {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; position: relative;
+    background: var(--slm-white); border: 1px solid var(--slm-cream-dark); border-radius: 14px;
+    padding: 14px 40px 14px 14px; margin-bottom: 10px;
+  }
+  .slm__table tr:last-child { margin-bottom: 0; }
+  .slm__table td { display: block; padding: 0; border-bottom: 0; }
+  .slm__table td::before {
+    content: attr(data-th); display: block; font-family: var(--slm-body); font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray);
+  }
+  .slm__table td.slm__label {
+    grid-column: 1 / -1; max-width: none; overflow: visible; white-space: normal; overflow-wrap: anywhere;
+    font-size: 15px; font-weight: 600; color: var(--slm-charcoal); line-height: 1.35;
+  }
+  .slm__table td.slm__label::before { content: none; }
+  .slm__table td.slm__cell--key {
+    font-family: var(--slm-heading); font-size: 20px; font-weight: 500; letter-spacing: -0.02em;
+    line-height: 1.25; color: var(--slm-charcoal);
+  }
+  .slm__table td[data-th='CCT'] { grid-column: span 2; }
+  .slm__table td.slm__cell--xy { display: none; }
+  .slm__table td.slm__cell--x { position: absolute; top: 7px; right: 6px; }
+  .slm__table td.slm__cell--x::before { content: none; }
+  .slm__table .slm__x { font-size: 22px; padding: 4px 9px; }
+}
 @media (max-width: 560px) {
   .slm { padding: 0 14px 40px; }
   .slm__live { grid-template-columns: 1fr; grid-template-areas: 'sun' 'hero' 'metrics' 'spectrum'; text-align: center; }
@@ -187,6 +221,13 @@
   .slm__log { padding: 18px 16px 20px; }
   .slm__connect { flex-direction: column; align-items: stretch; }
   .slm__btn--primary { text-align: center; }
+  /* status: dot and text on one line, every chip together on the next */
+  .slm__status { width: 100%; gap: 6px 8px; }
+  .slm__status [data-el='status-text'] { flex: 1 1 calc(100% - 17px); }
+  .slm__chip { font-size: 11.5px; padding: 3px 9px; }
+  .slm__field--grow { flex-basis: 100%; }
+  .slm__log-form .slm__btn--primary { width: 100%; }
+  .slm__hint { margin-top: -4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .slm__sun--lit, .slm__dot--connecting, .slm__dot--requesting, .slm__dot--calibrating, .slm__dot--reconnecting { animation: none; }

@@ -540,18 +540,20 @@ export function mount(root) {
       .slice()
       .reverse()
       .map(
+        // data-th carries the column name so the narrow-screen card layout can
+        // print it with ::before once the header row is hidden.
         (c) => `<tr>
-          <td class="slm__label">${esc(c.label)}</td>
-          <td><b>${fmt.int(c.cct)} K</b></td>
-          <td>${fmt.lux(c.lux)}</td>
-          <td>${fmt.signed(c.duv, 4)}</td>
-          <td>${fmt.signed(c.tint, 0)}</td>
-          <td>${fmt.fixed(c.Ra, 1)}</td>
-          <td>${c.R ? fmt.fixed(c.R[8], 1) : '–'}</td>
-          <td>${fmt.int(c.eml)}</td>
-          <td class="slm__muted">${c.x.toFixed(4)}, ${c.y.toFixed(4)}</td>
-          <td class="slm__muted">${fmt.time(c.ts)}</td>
-          <td><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
+          <td class="slm__label" data-th="Label">${esc(c.label)}</td>
+          <td class="slm__cell--key" data-th="CCT"><b>${fmt.int(c.cct)} K</b></td>
+          <td class="slm__cell--key" data-th="Lux">${fmt.lux(c.lux)}</td>
+          <td data-th="Duv">${fmt.signed(c.duv, 4)}</td>
+          <td data-th="Tint">${fmt.signed(c.tint, 0)}</td>
+          <td data-th="Ra">${fmt.fixed(c.Ra, 1)}</td>
+          <td data-th="R9">${c.R ? fmt.fixed(c.R[8], 1) : '–'}</td>
+          <td data-th="EML">${fmt.int(c.eml)}</td>
+          <td class="slm__muted slm__cell--xy" data-th="x, y">${c.x.toFixed(4)}, ${c.y.toFixed(4)}</td>
+          <td class="slm__muted" data-th="Time">${fmt.time(c.ts)}</td>
+          <td class="slm__cell--x"><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
         </tr>`,
       )
       .join('');
