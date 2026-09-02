@@ -25,8 +25,8 @@ Built by [Sunday Light](https://sundaylight.cc). Not affiliated with Opple. MIT 
 
 ### Troubleshooting
 
-- The chooser only lists Light Masters. If yours advertises under another name, use **Not listed? Show all devices**.
-- **Meter stuck? Force disconnect** drops any link this page holds and checks whether the meter is advertising. Links held by another tab, the Opple app, or the meter itself can only be cleared there: quit the browser fully, quit the app, restart the meter.
+- The chooser only lists Light Masters. If yours advertises under another name, open **Trouble connecting?** under the connect button and use **Not listed? Show all devices**.
+- **Meter stuck? Force disconnect** (same panel) drops any link this page holds and checks whether the meter is advertising. Links held by another tab, the Opple app, or the meter itself can only be cleared there: quit the browser fully, quit the app, restart the meter.
 - **Diagnostics** logs every connection step with timings and errors; *Copy log* for bug reports.
 
 ## How the numbers are calculated
