@@ -157,16 +157,16 @@
 .slm__spectrum { grid-area: spectrum; padding-top: 12px; border-top: 1.5px solid var(--slm-cream-dark); }
 .slm__spectrum:empty { display: none; }
 .slm__spectrum-caption { font-size: 11px; line-height: 1.4; letter-spacing: 0.02em; color: var(--slm-muted); text-align: left; margin: 0 0 8px; }
-.slm__spectrum-bars { display: flex; gap: 8px; align-items: flex-end; height: 74px; }
-.slm__band { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
-.slm__band-bar { width: 100%; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
+.slm__spectrum-bars { display: flex; gap: 8px; align-items: flex-end; height: 56px; }
+.slm__band-bar { flex: 1; min-width: 0; border-radius: 6px 6px 3px 3px; min-height: 2px; transition: height 0.35s ease; opacity: 0.9; }
 /* The host Shopify theme (Dawn) ships a global `div:empty { display: none }`
    reset. The band bars are empty divs sized by an inline height, so without a
    more specific rule every bar vanishes on sundaylight.cc and only the
    wavelength labels are left. Audited the rest of the template: every other
    div/section/p/dl is either filled before it is shown or has child elements. */
 .slm .slm__band-bar { display: block; }
-.slm__band span { font-size: 11px; color: var(--slm-muted); letter-spacing: 0.04em; }
+.slm__spectrum-labels { display: flex; gap: 8px; margin-top: 4px; }
+.slm__spectrum-labels span { flex: 1; min-width: 0; text-align: center; font-size: 11px; color: var(--slm-muted); letter-spacing: 0.04em; }
 
 /* reading log */
 .slm__log { background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: var(--slm-radius); padding: 22px 26px 24px; }
@@ -2524,15 +2524,18 @@ function mount(root) {
       return;
     }
     const max = Math.max(1e-9, ...r.bands);
+    // Bars and labels are separate rows so a bar's percentage height resolves
+    // against the full bar track, not the track minus the label.
     const bars = r.bandWavelengths
       .map((wl, i) => {
         const h = Math.max(2, (100 * r.bands[i]) / max);
-        return `<div class="slm__band" title="${wl} nm"><div class="slm__band-bar" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div><span>${wl}</span></div>`;
+        return `<div class="slm__band-bar" title="${wl} nm" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div>`;
       })
       .join('');
+    const labels = r.bandWavelengths.map((wl) => `<span>${wl}</span>`).join('');
     // The caption is rendered inside the host so `.slm__spectrum:empty` still
     // collapses the whole row when there is no reading.
-    host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div>`;
+    host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div><div class="slm__spectrum-labels">${labels}</div>`;
   }
 
   // -- reading log ----------------------------------------------------------

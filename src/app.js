@@ -458,15 +458,18 @@ export function mount(root) {
       return;
     }
     const max = Math.max(1e-9, ...r.bands);
+    // Bars and labels are separate rows so a bar's percentage height resolves
+    // against the full bar track, not the track minus the label.
     const bars = r.bandWavelengths
       .map((wl, i) => {
         const h = Math.max(2, (100 * r.bands[i]) / max);
-        return `<div class="slm__band" title="${wl} nm"><div class="slm__band-bar" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div><span>${wl}</span></div>`;
+        return `<div class="slm__band-bar" title="${wl} nm" style="height:${h.toFixed(1)}%;background:${wavelengthToCss(wl)}"></div>`;
       })
       .join('');
+    const labels = r.bandWavelengths.map((wl) => `<span>${wl}</span>`).join('');
     // The caption is rendered inside the host so `.slm__spectrum:empty` still
     // collapses the whole row when there is no reading.
-    host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div>`;
+    host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div><div class="slm__spectrum-labels">${labels}</div>`;
   }
 
   // -- reading log ----------------------------------------------------------
