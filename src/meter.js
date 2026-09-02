@@ -12,6 +12,7 @@
 import { NUS_SERVICE, NUS_TX, NUS_RX, OPCODE, buildCommand, encapsulate, MessageAssembler, opcodeOf, parseMeasurement, parseCalibration } from './protocol.js';
 import { lm3Process, lm3Calibrate, lm3Battery } from './lm3.js';
 import { lm4Process, lm4Calibrate, lm4Battery } from './lm4.js';
+import { FlickerAssembler, flickerBody, analyseFlicker, nextPeriod, bestResult, FLICKER_PERIODS } from './flicker.js';
 
 export const REQUEST_OPTIONS = {
   filters: [
@@ -35,6 +36,7 @@ export const REQUEST_OPTIONS_ALL = {
 
 const CONNECT_TIMEOUT_MS = 15000;
 const COMMAND_TIMEOUT_MS = 3000;
+const FLICKER_TIMEOUT_MS = 10000;
 const MAX_CONSECUTIVE_TIMEOUTS = 3;
 const RECONNECT_ATTEMPTS = 3;
 
@@ -183,6 +185,7 @@ export class OppleMeter extends EventTarget {
     this.seq = 0;
     this.assembler = new MessageAssembler();
     this.pending = null; // { opcode, resolve, reject, timer, sentAt }
+    this.flicker = null; // { assembler, period, resolve, reject, timer } - see requestFlicker
     this.calibration = null;
     this.model = null;
     this.pollTimer = null;
@@ -340,6 +343,103 @@ export class OppleMeter extends EventTarget {
     return processMeasurement(meas, this.calibration);
   }
 
+  /**
+   * Wait for the single command slot to free up, rather than rejecting the
+   * instant it is busy.
+   *
+   * A poll tick that was already in flight when polling stopped keeps its
+   * `pending` slot for up to its own timeout, so the second pass of the
+   * cascade was refused outright 1 ms after the first one finished
+   * ("Command already in flight", seen repeatedly on an LM4). Waiting is
+   * correct: the slot always frees, and a capture that starts 200 ms late is
+   * still a capture.
+   */
+  async waitForSlot(ms = 3500) {
+    const deadline = Date.now() + ms;
+    while ((this.pending || this.flicker || this.inFlight) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return !(this.pending || this.flicker || this.inFlight);
+  }
+
+  /**
+   * One flicker capture at a given sampling period. Resolves with the analysed
+   * result (see flicker.js). Slower than a measurement - the meter samples for
+   * up to ~150 ms and then sends four chunks - so it gets its own timeout.
+   */
+  async requestFlicker(period = FLICKER_PERIODS.broad, timeout = FLICKER_TIMEOUT_MS) {
+    if (!this.connected) throw new Error('Not connected');
+    if (!(await this.waitForSlot())) {
+      throw new Error(this.flicker ? 'Flicker capture already in flight' : 'Command already in flight');
+    }
+    if (!this.connected) throw new Error('Not connected');
+    this.seq = (this.seq + 1) & 0xff;
+    const frames = encapsulate(buildCommand(OPCODE.REQ_FREQ, this.seq, flickerBody(period)));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const pages = this.flicker ? this.flicker.assembler.pages.size : 0;
+        this.flicker = null;
+        // A page can still be in flight from the pass that just died. Anything
+        // arriving in this window belongs to it, not to the next capture -
+        // mixing pages from two sampling rates makes a waveform that analyses
+        // as convincing broadband flicker.
+        this.flickerDrainUntil = Date.now() + 500;
+        reject(new Error(`Flicker capture timed out (${pages}/4 chunks arrived)`));
+      }, timeout);
+      this.flicker = { assembler: new FlickerAssembler(this.model || 'lm4'), period, resolve, reject, timer };
+      this.writeFrames(frames).catch((err) => {
+        clearTimeout(timer);
+        this.flicker = null;
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * The Opple app's three-stage cascade. No single sampling mode resolves both
+   * mains-frequency PWM and switching ripple, so it starts broad and escalates
+   * only when the broad pass says the flicker is fast. `onStage` reports each
+   * pass so the UI can show progress.
+   */
+  async measureFlicker({ onStage = () => {} } = {}) {
+    const wasPolling = !!this.pollTimer;
+    this.stopPolling();
+    // A measurement in flight would collide with the capture: the meter
+    // answers one command at a time.
+    for (let i = 0; i < 20 && this.inFlight; i++) await new Promise((r) => setTimeout(r, 50));
+    try {
+      const results = {};
+      const done = [];
+      for (let guard = 0; guard < 3; guard++) {
+        const period = nextPeriod(done, results);
+        if (period === null) break;
+        onStage({ period, index: done.length });
+        this.log(`flicker capture at period ${period}`);
+        try {
+          const result = await this.requestFlicker(period);
+          results[period] = result;
+          // Raw span and range are logged on every pass because they are what
+          // tell a clipped capture from a genuinely flat one, and the question
+          // only ever comes up after the capture is gone.
+          this.log(
+            `flicker period ${period}: ${result.frequency.toFixed(0)} Hz, ${result.modulationDepth.toFixed(2)}% depth, index ${result.flickerIndex.toFixed(4)}` +
+              ` · raw ${result.rawMin}-${result.rawMax}/4095 counts, range ${result.range}`,
+          );
+        } catch (err) {
+          // One failed pass must not throw away what the others measured - the
+          // broad pass alone is a complete, reportable result.
+          this.log(`flicker period ${period} failed: ${err.message}`, 'warn');
+        }
+        done.push(period);
+      }
+      const best = bestResult(results);
+      if (!best) throw new Error('No flicker data returned');
+      return { ...best, passes: results };
+    } finally {
+      if (wasPolling) this.startPolling(this.pollInterval);
+    }
+  }
+
   command(opcode, responseOpcode, timeout = COMMAND_TIMEOUT_MS, body = new Uint8Array(0)) {
     if (!this.connected) return Promise.reject(new Error('Not connected'));
     if (this.pending) return Promise.reject(new Error('Command already in flight'));
@@ -384,6 +484,31 @@ export class OppleMeter extends EventTarget {
     const msg = this.assembler.feed(bytes);
     if (!msg) return;
     const code = opcodeOf(msg);
+    // Flicker is the one chunked response: four RES_FREQ messages make one
+    // waveform, so it cannot go through the single-response `pending` path.
+    if (code === OPCODE.RES_FREQ) {
+      if (this.flickerDrainUntil && Date.now() < this.flickerDrainUntil) {
+        this.debug('flicker chunk from a timed-out capture - dropped');
+        return;
+      }
+      if (!this.flicker) {
+        this.debug('stray flicker chunk (no capture in flight)');
+        return;
+      }
+      const capture = this.flicker.assembler.feed(msg);
+      if (!capture) return;
+      const f = this.flicker;
+      this.flicker = null;
+      clearTimeout(f.timer);
+      if (capture.slack !== 0) {
+        // Non-zero means the waveform offset for this model is wrong for this
+        // firmware; the samples will be garbage. Loud, because the numbers
+        // would still look plausible.
+        this.log(`flicker chunk layout unexpected: ${capture.slack} spare bytes - readings may be wrong`, 'warn');
+      }
+      f.resolve(analyseFlicker(capture, f.period));
+      return;
+    }
     if (this.pending && code === this.pending.opcode) {
       const p = this.pending;
       this.pending = null;
@@ -463,6 +588,11 @@ export class OppleMeter extends EventTarget {
       clearTimeout(this.pending.timer);
       this.pending.reject(new Error('Disconnected'));
       this.pending = null;
+    }
+    if (this.flicker) {
+      clearTimeout(this.flicker.timer);
+      this.flicker.reject(new Error('Disconnected'));
+      this.flicker = null;
     }
     if (this.notifyChar) {
       try {

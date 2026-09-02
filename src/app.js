@@ -6,6 +6,7 @@
 
 import { OppleMeter, bluetoothSupport, processMeasurement, releasePermittedDevices, advertisingState, meterKey, sanitiseLuxFactor, LUX_FACTOR_MIN, LUX_FACTOR_MAX } from './meter.js';
 import { cctToCss, wavelengthToCss } from './colour.js';
+import { RISK_LABEL, FLICKER_KIND_LABEL, riskChartSvg } from './flicker.js';
 
 const STORAGE = { log: 'slm.readings.v1', luxcal: 'slm.luxcal.v1' };
 const CAPTURE_SAMPLES = 8;
@@ -111,6 +112,30 @@ function template() {
   <div class="slm__spectrum" data-el="spectrum" aria-label="Sensor bands"></div>
 </section>
 
+<section class="slm__flicker" aria-label="Flicker">
+  <div class="slm__flicker-bar">
+    <button class="slm__btn slm__btn--primary" type="button" data-el="flicker-go" disabled>Measure flicker</button>
+    <span class="slm__flicker-risk" data-el="flicker-risk" hidden></span>
+    <span class="slm__hint" data-el="flicker-hint">Samples the light 1024 times to find PWM and driver ripple. Takes a few seconds.</span>
+  </div>
+  <div class="slm__flicker-body" data-el="flicker-body" hidden>
+    <dl class="slm__metrics">
+      <div><dt>Modulation <small>% flicker</small></dt><dd data-el="flicker-depth">–</dd></div>
+      <div><dt>Flicker index</dt><dd data-el="flicker-index">–</dd></div>
+      <div><dt>Frequency</dt><dd data-el="flicker-freq">–</dd></div>
+      <div><dt>Source <small>what is causing it</small></dt><dd data-el="flicker-kind">–</dd></div>
+      <div><dt>IEEE PAR-1789</dt><dd data-el="flicker-zone">–</dd></div>
+    </dl>
+    <div class="slm__wave-wrap">
+      <svg class="slm__wave" data-el="flicker-wave" viewBox="0 0 1024 120" preserveAspectRatio="none" role="img" aria-label="Flicker waveform"></svg>
+      <span class="slm__wave-label slm__wave-label--top" data-el="wave-max"></span>
+      <span class="slm__wave-label slm__wave-label--bottom" data-el="wave-min"></span>
+    </div>
+    <svg class="slm__risk-chart" data-el="flicker-chart" viewBox="0 0 480 292" role="img" aria-label="IEEE PAR-1789 flicker risk chart"></svg>
+    <p class="slm__flicker-note" data-el="flicker-note"></p>
+  </div>
+</section>
+
 <section class="slm__log" aria-label="Reading log">
   <form class="slm__log-form" data-el="form">
     <label class="slm__field slm__field--grow">
@@ -130,7 +155,7 @@ function template() {
     </div>
     <div class="slm__table-wrap">
       <table class="slm__table">
-        <thead><tr><th>Label</th><th>CCT</th><th>Lux</th><th>Duv</th><th>Tint</th><th>Ra</th><th>R9</th><th>EML</th><th>x, y</th><th>Time</th><th></th></tr></thead>
+        <thead><tr><th>Label</th><th>CCT</th><th>Lux</th><th>Duv</th><th>Tint</th><th>Ra</th><th>R9</th><th>EML</th><th>Flicker</th><th>x, y</th><th>Time</th><th></th></tr></thead>
         <tbody data-el="rows"></tbody>
       </table>
     </div>
@@ -175,6 +200,7 @@ export function mount(root) {
     live: null,
     rawHistory: [],
     capture: null, // { samples: [], resolve, reject }
+    flicker: null, // last analysed flicker capture, attached to the next logged reading
     readings: store.get(STORAGE.log, []),
     luxcal: store.get(STORAGE.luxcal, {}),
     meterKey: null,
@@ -274,6 +300,7 @@ export function mount(root) {
     els.help.hidden = connected || busy || !support.ok;
     if (connected) els.help.open = false;
     els.capture.disabled = !connected;
+    els['flicker-go'].disabled = !connected;
     if (stateName === 'disconnected') {
       els.model.hidden = true;
       els.battery.hidden = true;
@@ -364,6 +391,8 @@ export function mount(root) {
       if (state.meter !== meter) return;
       state.meter = null;
       state.live = null;
+      state.flicker = null;
+      renderFlicker(null);
       if (state.capture) {
         const c = state.capture;
         state.capture = null;
@@ -545,6 +574,141 @@ export function mount(root) {
     host.innerHTML = `<p class="slm__spectrum-caption">Sensor bands, nm - relative response per band</p><div class="slm__spectrum-bars">${bars}</div><div class="slm__spectrum-labels">${labels}</div>`;
   }
 
+  // -- flicker --------------------------------------------------------------
+  els['flicker-go'].addEventListener('click', async () => {
+    if (!state.meter || !state.meter.connected) return;
+    const btn = els['flicker-go'];
+    btn.disabled = true;
+    els['flicker-risk'].hidden = true;
+    try {
+      const result = await state.meter.measureFlicker({
+        onStage: ({ index }) => {
+          btn.textContent = `Measuring… pass ${index + 1}`;
+        },
+      });
+      state.flicker = { ...result, lux: state.live ? state.live.lux : null };
+      renderFlicker(result);
+      toast(
+        result.saturated
+          ? 'Too much light - the sensor is clipping. Move back and measure again.'
+          : !result.detected
+          ? result.lowSignal
+            ? 'Too little light for a flicker measurement'
+            : 'No flicker above the sensor noise floor'
+          : result.frequencyConfident
+            ? `Flicker ${result.modulationDepth.toFixed(2)}% at ${fmt.int(result.frequency)} Hz - ${FLICKER_KIND_LABEL[result.kind]}, ${RISK_LABEL[result.risk]}`
+            : `Flicker ${result.modulationDepth.toFixed(2)}%, no single frequency - ${FLICKER_KIND_LABEL[result.kind]}`,
+      );
+    } catch (err) {
+      diag(`flicker: ${err.message}`, 'error');
+      toast(err.message, true);
+    } finally {
+      btn.textContent = 'Measure flicker';
+      btn.disabled = !(state.meter && state.meter.connected);
+    }
+  });
+
+  function renderFlicker(f) {
+    els['flicker-body'].hidden = !f;
+    if (!f) {
+      els['flicker-risk'].hidden = true;
+      return;
+    }
+    // Nothing above the noise floor: say so instead of printing numbers read off
+    // noise. The depth becomes an upper bound, which is what it honestly is.
+    els['flicker-depth'].textContent = f.detected ? `${f.modulationDepth.toFixed(2)}%` : `under ${Math.max(0.5, f.modulationDepth).toFixed(1)}%`;
+    els['flicker-index'].textContent = f.detected ? f.flickerIndex.toFixed(4) : '–';
+    // "No frequency" and "no flicker" are different answers: a capture can have
+    // unmistakable depth with no single frequency behind it.
+    els['flicker-freq'].textContent = !f.frequencyConfident
+      ? f.detected
+        ? 'no single peak'
+        : 'none found'
+      : f.frequency >= 1000
+        ? `${(f.frequency / 1000).toFixed(2)} kHz`
+        : `${fmt.int(f.frequency)} Hz`;
+    els['flicker-kind'].textContent = FLICKER_KIND_LABEL[f.kind];
+    els['flicker-zone'].textContent = RISK_LABEL[f.risk];
+    els['flicker-risk'].textContent = f.saturated ? 'Too much light' : f.detected ? RISK_LABEL[f.risk] : FLICKER_KIND_LABEL.none;
+    els['flicker-risk'].className = `slm__flicker-risk slm__flicker-risk--${f.risk}`;
+    els['flicker-risk'].hidden = false;
+    // One plain-English line about what was found. The chart carries the window and
+    // bin-width detail.
+    // Saturation outranks every other explanation: once the sensor is pinned at
+    // its ceiling the trace flattens, so "no flicker" and a shrunken depth are
+    // both artefacts of being too close, not findings.
+    els['flicker-note'].textContent = f.saturated
+      ? `Too much light — ${Math.round(f.saturatedFraction * 100)}% of the samples are pinned at the sensor's ceiling, which flattens the trace and makes any flicker look smaller than it is. Move the meter back or dim the source and measure again.${f.detected ? ` The ${f.modulationDepth.toFixed(1)}% below is a floor, not a figure: the real depth is at least that.` : ''}`
+      : {
+          none: f.pedestalSuspect
+            ? `Too little light to measure flicker at all: the sensor read ${f.rawMin}-${f.rawMax} counts (of 4095), which is level with its own dark offset. Nothing about flicker can be concluded here - the trace above is the raw sensor output, not a flicker waveform. Move much closer or measure a brighter source.`
+            : f.lowSignal
+              ? 'Too little light reached the sensor for a trustworthy flicker measurement - move closer or brighten the source. The trace above is raw sensor output.'
+              : 'Nothing rose above the sensor’s own noise, so any real flicker is smaller than the meter can see.',
+          pwm: 'The driver switches the light fully off and on. This is the kind that causes stroboscopic effects, and it is a design choice.',
+          'mains-ripple': 'Twice the mains frequency — the supply is not fully smoothed. Visible to some people at depth.',
+          ripple: 'A smooth wobble in the supply rather than switching, too fast to see.',
+          broadband: 'Real, measurable modulation, but spread across frequencies rather than one - a noisy or drifting driver.',
+        }[f.kind] + (f.nearNyquist ? ' ⚠ Close to the fastest this mode can see, so the frequency may be an alias of something faster.' : '');
+    // Draw the RAW counts whenever the analysed trace cannot be trusted. The
+    // coupled waveform is the thing under suspicion in exactly those cases -
+    // showing it drew a dramatic spike train under the words "No flicker
+    // detected", when the spikes were manufactured by subtracting more than
+    // the signal.
+    renderWave(f.lowSignal || f.pedestalSuspect ? f.waveform : f.coupled, f.lux);
+    renderRiskChart(f);
+  }
+
+  // Fixed axis, never auto-ranged to the trace. Auto-ranging is actively
+  // misleading here: it stretches sensor noise on a flicker-free lamp to fill
+  // the frame, so a 1% ripple and a 90% square wave draw the same picture.
+  // The scale is anchored to the peak sample, so the depth of the dip you see
+  // IS the modulation - and when the live lux reading is available the axis is
+  // labelled in lux (peak sample = peak lux, scaled through the mean), because
+  // an oscilloscope trace of light should read in units of light.
+  function renderWave(wave, lux) {
+    const svg = els['flicker-wave'];
+    if (!wave || !wave.length) {
+      svg.innerHTML = '';
+      els['wave-max'].textContent = '';
+      els['wave-min'].textContent = '';
+      return;
+    }
+    const max = Math.max(...wave) || 1;
+    let mean = 0;
+    for (const v of wave) mean += v;
+    mean /= wave.length;
+    const step = 1024 / wave.length;
+    const y = (pct) => 116 - (pct / 100) * 112; // 0 at the floor, peak at the top
+    let d = '';
+    for (let i = 0; i < wave.length; i++) {
+      d += `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(2)} ${y((wave[i] / max) * 100).toFixed(2)}`;
+    }
+    const grid = [0, 25, 50, 75, 100]
+      .map(
+        (pct) =>
+          `<line x1="0" x2="1024" y1="${y(pct).toFixed(2)}" y2="${y(pct).toFixed(2)}" stroke="currentColor" stroke-opacity="${pct === 0 || pct === 100 ? 0.35 : 0.15}" stroke-width="1" vector-effect="non-scaling-stroke"/>`,
+      )
+      .join('');
+    svg.innerHTML = `${grid}<path d="${d}" fill="none" stroke="#e86b3a" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+    // Labels live in HTML, not the SVG - the SVG is stretched to fit and would
+    // shear any text inside it.
+    if (lux > 0 && mean > 0) {
+      els['wave-max'].textContent = `${fmt.lux((lux * max) / mean)} lx`;
+      els['wave-min'].textContent = '0 lx';
+    } else {
+      els['wave-max'].textContent = 'peak';
+      els['wave-min'].textContent = '0';
+    }
+  }
+
+  // The chart itself is a pure function in flicker.js (drawn from the same
+  // riskLimits() the badge uses, so the dot can never disagree with the label).
+  function renderRiskChart(f) {
+    const svg = els['flicker-chart'];
+    if (svg) svg.innerHTML = riskChartSvg(f);
+  }
+
   // -- reading log ----------------------------------------------------------
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -571,6 +735,19 @@ export function mount(root) {
         eml: r.eml,
         cs: r.cs,
         luxFactor: r.luxFactor,
+        // Flicker is a separate, slower capture, so a row carries it only if
+        // one was run for this light. Stored with its age so a stale capture
+        // from a different lamp is visible rather than silently attached.
+        flicker: state.flicker
+          ? {
+              detected: state.flicker.detected,
+              kind: state.flicker.kind,
+              modulationDepth: state.flicker.modulationDepth,
+              flickerIndex: state.flicker.flickerIndex,
+              frequency: state.flicker.frequency,
+              risk: state.flicker.risk,
+            }
+          : null,
       });
       store.set(STORAGE.log, state.readings);
       renderReadings();
@@ -588,7 +765,7 @@ export function mount(root) {
   });
 
   els.export.addEventListener('click', () => {
-    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter', 'lux_factor'];
+    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'flicker_detected', 'flicker_pct', 'flicker_index', 'flicker_hz', 'flicker_kind', 'flicker_risk', 'meter', 'lux_factor'];
     const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
     for (const c of state.readings) {
@@ -606,6 +783,12 @@ export function mount(root) {
           ...Array.from({ length: 14 }, (_, i) => (c.R ? c.R[i].toFixed(1) : '')),
           c.eml === null || c.eml === undefined ? '' : c.eml.toFixed(0),
           c.cs === null || c.cs === undefined ? '' : c.cs.toFixed(3),
+          c.flicker ? String(c.flicker.detected !== false) : '',
+          c.flicker && c.flicker.detected !== false ? c.flicker.modulationDepth.toFixed(2) : '',
+          c.flicker && c.flicker.detected !== false ? c.flicker.flickerIndex.toFixed(4) : '',
+          c.flicker && c.flicker.detected !== false && c.flicker.frequency > 0 ? c.flicker.frequency.toFixed(0) : '',
+          c.flicker ? c.flicker.kind || '' : '',
+          c.flicker ? c.flicker.risk : '',
           c.model,
           (c.luxFactor ?? 1).toFixed(4),
         ].join(','),
@@ -641,6 +824,15 @@ export function mount(root) {
           <td data-th="Ra">${fmt.fixed(c.Ra, 1)}</td>
           <td data-th="R9">${c.R ? fmt.fixed(c.R[8], 1) : '–'}</td>
           <td data-th="EML">${fmt.int(c.eml)}</td>
+          <td data-th="Flicker">${
+            !c.flicker
+              ? '–'
+              : c.flicker.detected === false
+                ? 'none found'
+                : !(c.flicker.frequency > 0)
+                  ? `${c.flicker.modulationDepth.toFixed(1)}% broadband`
+                  : `${c.flicker.modulationDepth.toFixed(1)}% @ ${c.flicker.frequency >= 1000 ? `${(c.flicker.frequency / 1000).toFixed(1)}k` : Math.round(c.flicker.frequency)} Hz`
+          }</td>
           <td class="slm__muted slm__cell--xy" data-th="x, y">${c.x.toFixed(4)}, ${c.y.toFixed(4)}</td>
           <td class="slm__muted" data-th="Time">${fmt.time(c.ts)}</td>
           <td class="slm__cell--x"><button type="button" class="slm__x" data-remove="${c.id}" aria-label="Remove">×</button></td>
@@ -658,6 +850,7 @@ export function mount(root) {
   }
 
   renderLive(null);
+  renderFlicker(null);
   renderReadings();
   renderDiag();
   setStatus('disconnected', 'Not connected');
