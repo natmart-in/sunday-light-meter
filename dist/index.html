@@ -970,7 +970,7 @@ function spdOfPlanck(cct) {
 
 function spdOfD(cct) {
   const xlo = -4.607e9 / cct ** 3 + 2.9678e6 / cct ** 2 + 0.09911e3 / cct + 0.244063;
-  const xhi = 2.0064e9 / cct ** 3 + 1.9018e6 / cct ** 2 + 0.24748e3 / cct + 0.23704;
+  const xhi = -2.0064e9 / cct ** 3 + 1.9018e6 / cct ** 2 + 0.24748e3 / cct + 0.23704;
   const xd = cct < 7000 ? xlo : xhi;
   const yd = -3 * xd ** 2 + 2.87 * xd - 0.275;
   const m1 = (-1.3515 - 1.7703 * xd + 5.9114 * yd) / (0.0241 + 0.2562 * xd - 0.7341 * yd);

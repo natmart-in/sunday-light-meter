@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 
 import { lm3Process, lm3Calibrate } from '../src/lm3.js';
 import { lm4Process, lm4Calibrate, lm4Predict, lm4CircadianStimulus, lm4Battery } from '../src/lm4.js';
-import { batteryFromMv, cctFromXy, duvFromUv, xyToUv, interpolateSpd, calcCri } from '../src/colour.js';
+import { batteryFromMv, cctFromXy, duvFromUv, xyToUv, interpolateSpd, calcCri, spdOfD, spdToXyz, xyzToXy } from '../src/colour.js';
 import { processMeasurement } from '../src/meter.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -146,4 +146,21 @@ test('real LM4 frames produce a sane desk-light reading', () => {
   assert.equal(r.battery.percent, 100);
   assert.equal(r.temperature, 27.5);
   assert.equal(hexBytes('0cf2').length, 2);
+});
+
+test('CIE daylight reference matches the published D-illuminant chromaticities', () => {
+  // CIE 15:2004 daylight locus; the x_D polynomial changes at 7000 K and the
+  // high-temperature branch is the one that was mis-signed (inherited from open-light-master).
+  const xy = (T) => xyzToXy(...spdToXyz(spdOfD(T)));
+  const check = (T, x, y) => {
+    const [xd, yd] = xy(T);
+    assert.ok(Math.abs(xd - x) < 5e-4 && Math.abs(yd - y) < 5e-4, `D at ${T} K: ${xd.toFixed(4)}, ${yd.toFixed(4)} vs ${x}, ${y}`);
+  };
+  check(5003, 0.3457, 0.3585); // D50
+  check(6504, 0.3127, 0.329); // D65
+  check(7504, 0.299, 0.3149); // D75
+  // The two branches must meet at 7000 K without a jump.
+  const [a] = xy(6999.9);
+  const [b] = xy(7000);
+  assert.ok(Math.abs(a - b) < 1e-4, `x_D jump at 7000 K: ${a} vs ${b}`);
 });
