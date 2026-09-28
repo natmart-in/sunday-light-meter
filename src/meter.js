@@ -164,6 +164,7 @@ export class OppleMeter extends EventTarget {
     this.consecutiveTimeouts = 0;
     this.manualDisconnect = false;
     this.reconnecting = false;
+    this.established = false; // auto-reconnect only once a session has fully opened
     this.onNotify = this.onNotify.bind(this);
     this.onGattDisconnected = this.onGattDisconnected.bind(this);
   }
@@ -204,12 +205,14 @@ export class OppleMeter extends EventTarget {
       await this.openSession();
     } catch (err) {
       this.log(`session failed: ${err.name || ''} ${err.message}`, 'error');
-      this.teardown();
       // Never leave a half-open link behind: it would keep the meter busy and
-      // show up as "Paired"/connected in the next chooser.
-      this.cancelPendingConnect();
+      // show up as "Paired"/connected in the next chooser. Retire this session
+      // too - the device object is shared with the next Connect, and a failed
+      // session still listening on it would reconnect behind the page's back.
+      this.dispose();
       throw err;
     }
+    this.established = true;
     return this.info();
   }
 
@@ -419,6 +422,14 @@ export class OppleMeter extends EventTarget {
     else this.onGattDisconnected();
   }
 
+  /** Retire this session for good: no auto-reconnect, off the device's events, link dropped. */
+  dispose() {
+    this.manualDisconnect = true;
+    if (this.device) this.device.removeEventListener('gattserverdisconnected', this.onGattDisconnected);
+    this.teardown();
+    this.cancelPendingConnect();
+  }
+
   teardown() {
     this.stopPolling();
     if (this.pending) {
@@ -441,8 +452,11 @@ export class OppleMeter extends EventTarget {
   async onGattDisconnected() {
     this.log('GATT link dropped', this.manualDisconnect ? 'info' : 'warn');
     this.teardown();
-    if (this.manualDisconnect || this.reconnecting) {
+    // A link lost while the first session is still opening belongs to
+    // connect(), which fails and cleans up.
+    if (this.manualDisconnect || this.reconnecting || !this.established) {
       if (this.manualDisconnect) {
+        this.dispose();
         this.status('disconnected', 'Disconnected');
         this.emit('disconnected', {});
       }
@@ -457,6 +471,12 @@ export class OppleMeter extends EventTarget {
           await new Promise((r) => setTimeout(r, 800 * attempt));
           if (this.manualDisconnect) break;
           await this.openSession();
+          if (this.manualDisconnect) {
+            // Disconnect was pressed while this attempt was opening the link.
+            this.teardown();
+            this.cancelPendingConnect();
+            break;
+          }
           this.startPolling(this.pollInterval);
           this.reconnecting = false;
           return;
@@ -469,7 +489,7 @@ export class OppleMeter extends EventTarget {
     } finally {
       this.reconnecting = false;
     }
-    this.cancelPendingConnect();
+    this.dispose();
     this.status('disconnected', 'Meter disconnected - press its button to wake it, then connect again');
     this.emit('disconnected', {});
   }
