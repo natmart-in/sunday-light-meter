@@ -10,6 +10,11 @@
 // real Light Master III under daylight (4 Nov 2026) against CIE D55.
 export const LM3_RECON_GAINS = [0.781596, 0.780796, 1, 1.20066, 1.26045, 1.55117];
 
+// Lux = LM3_LUX_SCALE x photopic Y of the reconstructed spectrum (general-mode
+// sources). Set so it equals Opple's matrix lux on the 4000 K bench frame, where
+// the LM3 matched a Yocto-Light-V5 lux sensor (4 Nov 2026).
+export const LM3_LUX_SCALE = 0.28075;
+
 export const LM3_RECON_W = [
   [0.0324836, 0.0525116, -0.0374698, 0.0144153, -0.0135159, -0.00141974],
   [0.0342436, 0.0523299, -0.0389155, 0.0160096, -0.0144455, -0.000550756],

@@ -15,8 +15,9 @@ import { dirname, join } from 'node:path';
 
 import { parseMeasurement, parseCalibration } from '../src/protocol.js';
 import { processMeasurement } from '../src/meter.js';
-import { lm3ReconstructSpd, lm3Cri, LM3_WAVELENGTHS } from '../src/lm3.js';
+import { lm3ReconstructSpd, lm3Cri, lm3SpdLux, lm3Process, lm3LightMode, LM3_WAVELENGTHS, MODE_INCANDESCENT } from '../src/lm3.js';
 import { LM3_RECON_GAINS, LM3_RECON_W } from '../src/lm3-recon-data.js';
+import { CMF_1931_2DEG } from '../src/cie-data.js';
 import { calcCri, cctFromXy, interpolateSpd, spdOfD, spdOfPlanck, spdToXyz, xyzToXy } from '../src/colour.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -128,4 +129,50 @@ test('simulated LM3 orders good and poor sources correctly', () => {
 
 test('lm3Cri returns null for an empty spectrum', () => {
   assert.equal(lm3Cri(new Array(81).fill(0)), null);
+});
+
+// --- lux -----------------------------------------------------------------------
+
+test('real bench frames: LM3 lux is anchored to the Opple matrix at 4000 K', () => {
+  const r = readings.find((p) => p.label === '4000 K').lm3;
+  assert.equal(r.luxSource, 'reconstruction');
+  assert.ok(Math.abs(r.lux / r.luxMatrix - 1) < 0.002, `lux ${r.lux} vs matrix ${r.luxMatrix}`);
+});
+
+test('real bench frames: LM3 lux now follows warm-to-cool changes like the LM4 (was +7 % / -6 %)', () => {
+  // Daylight subtracted, each meter relative to its own 4000 K reading. On the bench the LM4 and a
+  // Yocto-Light-V5 agreed within 1 % on these ratios; Opple's LM3 matrix did not.
+  const day = readings.find((p) => p.label === 'daylight');
+  const ref = readings.find((p) => p.label === '4000 K');
+  const rel = (p, m, key) => (p[m][key] - day[m][key]) / (ref[m][key] - day[m][key]);
+  for (const label of ['2700 K', '6500 K']) {
+    const p = readings.find((q) => q.label === label);
+    const lm4 = rel(p, 'lm4', 'lux');
+    const fixed = rel(p, 'lm3', 'lux');
+    const matrix = rel(p, 'lm3', 'luxMatrix');
+    assert.ok(Math.abs(fixed / lm4 - 1) < 0.02, `${label}: LM3 ${fixed.toFixed(3)} vs LM4 ${lm4.toFixed(3)}`);
+    assert.ok(Math.abs(matrix / lm4 - 1) > 0.04, `${label}: matrix ${matrix.toFixed(3)} (regression note)`);
+  }
+});
+
+test('simulated LM3 lux tracks true lux across CIE LED and fluorescent sources', () => {
+  // Scale-free check: estimated / true lux should be the same for every source.
+  const names = ['CIE F2', 'CIE F7', 'CIE F11', 'CIE LED-B1', 'CIE LED-B2', 'CIE LED-B3', 'CIE LED-B4', 'CIE LED-B5', 'CIE LED-BH1', 'CIE LED-V1', 'CIE LED-V2'];
+  const trueY = (spd) => spd.reduce((acc, v, i) => acc + v * CMF_1931_2DEG[i * 3 + 1], 0);
+  const ratios = names.map((n) => [n, lm3SpdLux(lm3ReconstructSpd(simulate(sources[n]))) / trueY(sources[n])]);
+  const sorted = ratios.map((r) => r[1]).sort((a, b) => a - b);
+  const med = sorted[sorted.length >> 1];
+  // Narrowband tri-phosphor fluorescent (F11) is the hard case for six broad bands: ~6 %.
+  for (const [n, r] of ratios) {
+    const tol = n === 'CIE F11' ? 0.07 : 0.03;
+    assert.ok(Math.abs(r / med - 1) < tol, `${n}: ${((r / med - 1) * 100).toFixed(1)} %`);
+  }
+});
+
+test('incandescent-mode readings keep the Opple matrix lux', () => {
+  const ch = [4, 10, 15, 22, 26, 27];
+  assert.equal(lm3LightMode(ch), MODE_INCANDESCENT);
+  const r = lm3Process(ch, 1);
+  assert.equal(r.luxSource, 'opple-matrix');
+  assert.equal(r.lux, r.luxMatrix);
 });

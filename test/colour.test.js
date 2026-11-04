@@ -21,7 +21,8 @@ const close = (a, b, rel = 1e-9, what = '') => {
 // Colour (matrix, mode, xy, CCT, Duv, lux, tint) and EML still follow open-light-master
 // exactly. CRI and the spectrum do not: since Nov 2026 the LM3 reconstructs the spectrum
 // instead of splining the raw bands (see test/lm3-cri.test.js), so the fixture's Ra/R/spd,
-// which came from the spline method, are no longer compared.
+// which came from the spline method, are no longer compared. Nor is the displayed lux for
+// general-mode sources (now from the spectrum); the matrix lux is still checked as luxMatrix.
 test('LM3 pipeline matches the validated Python port (open-light-master maths)', () => {
   for (const f of ref.fixtures) {
     const { channels, c1 } = lm3Calibrate(f.raw, f.k);
@@ -33,7 +34,7 @@ test('LM3 pipeline matches the validated Python port (open-light-master maths)',
     close(r.y, f.y, 1e-9, `${f.name} y`);
     close(r.u, f.u, 1e-9, `${f.name} u`);
     close(r.v, f.v, 1e-9, `${f.name} v`);
-    close(r.lux, f.lux, 1e-9, `${f.name} lux`);
+    close(r.luxMatrix, f.lux, 1e-9, `${f.name} lux (Opple matrix)`);
     close(r.duv, f.duv, 1e-9, `${f.name} duv`);
     if (f.cct !== null) close(r.cct, f.cct, 1e-9, `${f.name} cct`);
     if (f.tint !== null) close(r.tint, f.tint, 1e-9, `${f.name} tint`);

@@ -12,9 +12,17 @@
 // power: the bands differ in sensitivity, so the spline came out ~1,500 K
 // warmer than the light and every source read Ra ~80 (daylight 79, SL1 79-86
 // where a Sekonic C-800 and the LM4 read 95-98).
+//
+// Lux: for general-mode sources (LEDs, fluorescent, daylight) lux is the
+// photopic Y of the reconstructed spectrum. Opple's general matrix read warm
+// light ~7 % high and cool light ~6 % low against an LM4 and a Yocto lux sensor
+// that agreed with each other within 1 %; the reconstruction tracks them within
+// 0.5 %. Its level is anchored to the matrix at 4000 K, where the LM3 matched the
+// Yocto. Incandescent and monochromatic sources keep Opple's dedicated matrices.
 
 import { xyzToXy, xyToUv, cctFromXy, duvFromUv, tintFromXy, spdToXyz, calcCri, batteryFromMv } from './colour.js';
-import { LM3_RECON_W, LM3_RECON_GAINS } from './lm3-recon-data.js';
+import { LM3_RECON_W, LM3_RECON_GAINS, LM3_LUX_SCALE } from './lm3-recon-data.js';
+import { CMF_1931_2DEG } from './cie-data.js';
 
 export const LM3_WAVELENGTHS = [450, 500, 550, 570, 600, 650];
 export const LM3_BAND_LABELS = ['V', 'B', 'G', 'Y', 'O', 'R'];
@@ -66,6 +74,13 @@ export function lm3ReconstructSpd(ch) {
   return LM3_RECON_W.map((row) => Math.max(0, row.reduce((acc, w, k) => acc + w * c[k], 0)));
 }
 
+/** Lux from the reconstructed spectrum (photopic Y, scaled to the meter's lux). */
+export function lm3SpdLux(spd) {
+  let y = 0;
+  for (let i = 0; i < spd.length; i++) y += spd[i] * CMF_1931_2DEG[i * 3 + 1];
+  return LM3_LUX_SCALE * y;
+}
+
 /** CIE 13.3 CRI of the reconstructed spectrum, referenced at the spectrum's own CCT. Null if it has no usable CCT. */
 export function lm3Cri(spd) {
   if (!spd.some((v) => v > 0)) return null;
@@ -107,11 +122,13 @@ export function lm3Process(channels, c1) {
     x = 0;
     y = 0;
   }
-  const lux = Y;
+  const spd = lm3ReconstructSpd(channels);
+  const luxMatrix = Y;
+  const luxSource = mode === MODE_GENERAL && luxMatrix > 0 ? 'reconstruction' : 'opple-matrix';
+  const lux = luxSource === 'reconstruction' ? lm3SpdLux(spd) : luxMatrix;
   const cct = cctFromXy(x, y);
   const duv = duvFromUv(u, v);
   const { tint } = tintFromXy(x, y);
-  const spd = lm3ReconstructSpd(channels);
   let cri = null;
   let eml = null;
   if (lux > 0 && Number.isFinite(cct)) {
@@ -125,6 +142,8 @@ export function lm3Process(channels, c1) {
     u,
     v,
     lux,
+    luxMatrix,
+    luxSource,
     cct,
     duv,
     tint,
