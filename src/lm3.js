@@ -4,8 +4,17 @@
 // BLE), classified by source type, and mapped to XYZ with Opple's 3x7
 // tristimulus matrices (protocol facts via OlliV/open-light-master). Y is
 // illuminance in lux directly.
+//
+// CRI: the six bands are turned into a full spectrum with a Wiener estimator
+// (src/lm3-recon-data.js) and scored with CIE 13.3 against a reference at
+// that spectrum's own CCT. The earlier method - a cubic spline through the raw
+// band values, scored against the matrix CCT - treated counts as spectral
+// power: the bands differ in sensitivity, so the spline came out ~1,500 K
+// warmer than the light and every source read Ra ~80 (daylight 79, SL1 79-86
+// where a Sekonic C-800 and the LM4 read 95-98).
 
-import { xyzToXy, xyToUv, cctFromXy, duvFromUv, tintFromXy, interpolateSpd, calcCri, batteryFromMv } from './colour.js';
+import { xyzToXy, xyToUv, cctFromXy, duvFromUv, tintFromXy, spdToXyz, calcCri, batteryFromMv } from './colour.js';
+import { LM3_RECON_W, LM3_RECON_GAINS } from './lm3-recon-data.js';
 
 export const LM3_WAVELENGTHS = [450, 500, 550, 570, 600, 650];
 export const LM3_BAND_LABELS = ['V', 'B', 'G', 'Y', 'O', 'R'];
@@ -51,6 +60,22 @@ export function lm3ChannelsToXyz(ch, c1, mode) {
   return [dot(m[0]), dot(m[1]), dot(m[2])];
 }
 
+/** Spectrum (380..780 nm, 5 nm, arbitrary scale) reconstructed from the six calibrated bands. */
+export function lm3ReconstructSpd(ch) {
+  const c = ch.slice(0, 6).map((v, i) => v / LM3_RECON_GAINS[i]);
+  return LM3_RECON_W.map((row) => Math.max(0, row.reduce((acc, w, k) => acc + w * c[k], 0)));
+}
+
+/** CIE 13.3 CRI of the reconstructed spectrum, referenced at the spectrum's own CCT. Null if it has no usable CCT. */
+export function lm3Cri(spd) {
+  if (!spd.some((v) => v > 0)) return null;
+  const [X, Y, Z] = spdToXyz(spd);
+  const [x, y] = xyzToXy(X, Y, Z);
+  const cct = cctFromXy(x, y);
+  if (!Number.isFinite(cct) || cct < 1000 || cct > 25000) return null;
+  return calcCri(cct, spd);
+}
+
 /** Equivalent melanopic lux estimate (Opple's LM3 fit). */
 export function lm3Eml(cct, ch, mode) {
   const [v, b, g, y, o, r] = ch;
@@ -86,11 +111,11 @@ export function lm3Process(channels, c1) {
   const cct = cctFromXy(x, y);
   const duv = duvFromUv(u, v);
   const { tint } = tintFromXy(x, y);
-  const spd = interpolateSpd(LM3_WAVELENGTHS, channels);
+  const spd = lm3ReconstructSpd(channels);
   let cri = null;
   let eml = null;
   if (lux > 0 && Number.isFinite(cct)) {
-    cri = calcCri(cct, spd);
+    cri = lm3Cri(spd);
     eml = lm3Eml(cct, channels, mode);
   }
   return {
@@ -107,7 +132,7 @@ export function lm3Process(channels, c1) {
     modeName: LM3_MODE_NAMES[mode],
     Ra: cri ? cri.Ra : null,
     R: cri ? cri.R : null,
-    criSource: cri ? 'spline' : null,
+    criSource: cri ? 'reconstruction' : null,
     eml,
     cs: null,
     spd,

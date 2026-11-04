@@ -18,6 +18,10 @@ const close = (a, b, rel = 1e-9, what = '') => {
   assert.ok(Math.abs(a - b) <= tol, `${what}: ${a} vs ${b}`);
 };
 
+// Colour (matrix, mode, xy, CCT, Duv, lux, tint) and EML still follow open-light-master
+// exactly. CRI and the spectrum do not: since Nov 2026 the LM3 reconstructs the spectrum
+// instead of splining the raw bands (see test/lm3-cri.test.js), so the fixture's Ra/R/spd,
+// which came from the spline method, are no longer compared.
 test('LM3 pipeline matches the validated Python port (open-light-master maths)', () => {
   for (const f of ref.fixtures) {
     const { channels, c1 } = lm3Calibrate(f.raw, f.k);
@@ -34,10 +38,9 @@ test('LM3 pipeline matches the validated Python port (open-light-master maths)',
     if (f.cct !== null) close(r.cct, f.cct, 1e-9, `${f.name} cct`);
     if (f.tint !== null) close(r.tint, f.tint, 1e-9, `${f.name} tint`);
     if (f.Ra !== undefined) {
-      close(r.Ra, f.Ra, 1e-8, `${f.name} Ra`);
-      r.R.forEach((v, i) => close(v, f.R[i], 1e-8, `${f.name} R${i + 1}`));
       close(r.eml, f.eml, 1e-9, `${f.name} eml`);
-      r.spd.forEach((v, i) => close(v, f.spd[i], 1e-9, `${f.name} spd[${i}]`));
+      assert.equal(r.R.length, 14, `${f.name} R1..R14`);
+      assert.equal(r.spd.length, 81, `${f.name} spd`);
     }
   }
 });
@@ -137,14 +140,15 @@ test('real LM4 frames produce a sane desk-light reading', () => {
   const hexBytes = (s) => s.match(/../g).map((b) => parseInt(b, 16));
   const K = [1.0352, 1.0451, 0.9688, 1.1088, 1.0389, 1.0539, 1.0674, 1.1947, 1.0];
   const raw = [70, 189, 224, 334, 512, 628, 856, 784, 1749];
-  const r = processMeasurement({ model: 'lm4', raw, batteryRaw: 3314, temperature: 27.5 }, { model: 'lm4', kSensor: K });
+  const r = processMeasurement({ model: 'lm4', raw, nir: 275, batteryRaw: 3314, temperature: null }, { model: 'lm4', kSensor: K });
   assert.ok(Math.abs(r.cct - 4144) < 3, `cct ${r.cct}`);
   assert.ok(Math.abs(r.lux - 868.8) < 1, `lux ${r.lux}`);
   assert.ok(Math.abs(r.duv + 0.0017) < 5e-4, `duv ${r.duv}`);
   assert.ok(Math.abs(r.Ra - 97.3) < 0.2, `Ra ${r.Ra}`);
   assert.ok(Math.abs(r.R[8] - 88.7) < 0.3, `R9 ${r.R[8]}`);
   assert.equal(r.battery.percent, 100);
-  assert.equal(r.temperature, 27.5);
+  assert.equal(r.temperature, null);
+  assert.equal(r.nir, 275);
   assert.equal(hexBytes('0cf2').length, 2);
 });
 

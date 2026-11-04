@@ -110,13 +110,15 @@ test('real LM4 calibration frame: nine little-endian factors', () => {
   c.kSensor.forEach((k, i) => assert.ok(Math.abs(k - expected[i]) < 1e-3, `k[${i}]=${k}`));
 });
 
-test('real LM4 measurement frame: channels, temperature and battery', () => {
+test('real LM4 measurement frame: channels, NIR and battery', () => {
   const p = hexBytes(REAL_MEAS);
   assert.equal(p.length, 23);
   const m = parseMeasurement(Uint8Array.from([...header(OPCODE.RES_MEAS, p.length), ...p]));
   assert.equal(m.model, 'lm4');
   assert.deepEqual(m.raw, [70, 189, 224, 334, 512, 628, 856, 784, 1749]);
   assert.equal(m.raw[8], Math.max(...m.raw), 'clear channel is the largest');
-  assert.equal(m.temperature, 27.5);
+  // Word 9 (275 here) is the AS7341 NIR channel - it was once read as 27.5 °C.
+  assert.equal(m.nir, 275);
+  assert.equal(m.temperature, null);
   assert.equal(m.batteryRaw, 3314);
 });

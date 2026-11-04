@@ -110,9 +110,10 @@ const u16be = (b, i) => (b[i] << 8) | b[i + 1];
 /**
  * Parse a RES_MEAS message. Model is detected from the payload length:
  *   LM3: [0]=skip, [1..12]=6 x u16 BE (450/500/550/570/600/650 nm), [13..14]=battery mV, [15]=temperature
- *   LM4: [0]=skip, [1..18]=9 x u16 BE (AS7341 F1..F8 + clear), [19..20]=temperature x10 (°C), [21..22]=battery raw
- *   (LM4 layout confirmed on a real unit: 23-byte payload, clear is the largest channel,
- *    word 9 read 275 = 27.5 °C on a desk, battery raw 3314.)
+ *   LM4: [0]=skip, [1..18]=9 x u16 BE (AS7341 F1..F8 + clear), [19..20]=NIR u16 BE, [21..22]=battery raw
+ *   (LM4 layout confirmed on a real unit: 23-byte payload, clear is the largest channel, battery raw 3314.
+ *    Word 9 is the AS7341 near-infrared channel, not temperature: on the bench it read 15 with a lamp off
+ *    and 35-43 within seconds of an LED turning on, and 0.4-0.5 of clear in daylight vs ~0.1 under LEDs.)
  */
 export function parseMeasurement(msg) {
   if (!msg || msg.length < HEADER_LEN + 16) return null;
@@ -120,9 +121,7 @@ export function parseMeasurement(msg) {
   if (p.length >= 23) {
     const raw = [];
     for (let i = 0; i < 9; i++) raw.push(u16be(p, 1 + 2 * i));
-    const t10 = u16be(p, 19);
-    const temperature = t10 > 0 && t10 < 1200 ? t10 / 10 : null;
-    return { model: 'lm4', raw, batteryRaw: u16be(p, 21), temperature };
+    return { model: 'lm4', raw, nir: u16be(p, 19), batteryRaw: u16be(p, 21), temperature: null };
   }
   const raw = [];
   for (let i = 0; i < 6; i++) raw.push(u16be(p, 1 + 2 * i));

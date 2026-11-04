@@ -431,7 +431,7 @@ export function mount(root) {
     els.cs.textContent = lit && r.cs !== null ? fmt.fixed(r.cs, 3) : '–';
     els.mode.textContent = r && r.modeName ? `· ${r.modeName}` : '';
     els.rlist.textContent = lit && r.R ? r.R.map((v) => Math.round(v)).join(' ') : '–';
-    els.ra.title = r && r.criSource === 'spline' ? 'Estimated from a spline through the sensor bands' : r && r.criSource === 'opple-model' ? "Opple's LM4 model" : '';
+    els.ra.title = r && r.criSource === 'reconstruction' ? 'Estimated from a spectrum reconstructed from the six sensor bands' : r && r.criSource === 'spline' ? 'Estimated from a spline through the sensor bands' : r && r.criSource === 'opple-model' ? "Opple's LM4 model" : '';
 
     if (r && r.battery && r.battery.percent !== null) {
       els.battery.textContent = `battery ${Math.round(r.battery.percent)}%`;
