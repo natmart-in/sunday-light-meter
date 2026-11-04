@@ -86,6 +86,10 @@
   background: var(--slm-cream); border: 1px solid var(--slm-cream-dark); border-radius: 12px;
 }
 .slm .slm__help-note { font-size: 12.5px; line-height: 1.5; color: var(--slm-gray); margin: -6px 0 0; }
+.slm .slm__help-note--first { margin: 0; }
+.slm__luxcal-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+.slm .slm__luxcal-row .slm__field input { width: 9.5em; }
+.slm__luxcal-row .slm__btn { margin-bottom: 9px; }
 .slm__status { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--slm-gray); flex-wrap: wrap; }
 .slm__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--slm-muted); flex: none; transition: background 0.3s, box-shadow 0.3s; }
 .slm__dot--connected { background: var(--slm-ok); box-shadow: 0 0 0 4px rgba(90, 158, 111, 0.18); }
@@ -155,11 +159,11 @@
 .slm__log-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 18px; }
 .slm__field > span { display: block; font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slm-gray); margin-bottom: 8px; }
 .slm__field--grow { flex: 1 1 260px; }
-.slm__field input[type='text'] {
+.slm__field input[type='text'], .slm__field input[type='number'] {
   width: 100%; font: inherit; font-size: 15px; color: var(--slm-charcoal); background: var(--slm-white);
   border: 1.5px solid var(--slm-cream-deep); border-radius: 999px; padding: 12px 18px;
 }
-.slm__field input[type='text']:focus { outline: none; border-color: var(--slm-orange); }
+.slm__field input[type='text']:focus, .slm__field input[type='number']:focus { outline: none; border-color: var(--slm-orange); }
 .slm__hint { font-size: 13px; color: var(--slm-gray); flex-basis: 100%; }
 
 .slm__results { margin-top: 22px; }

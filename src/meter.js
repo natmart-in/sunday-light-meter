@@ -132,17 +132,44 @@ function withTimeout(promise, ms, what) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** Turn a raw measurement + calibration into the full processed reading. */
-export function processMeasurement(meas, cal) {
+export const LUX_FACTOR_MIN = 0.5;
+export const LUX_FACTOR_MAX = 2;
+
+/** A user lux calibration factor, or 1 if it is missing or outside 0.5-2. */
+export function sanitiseLuxFactor(v) {
+  const f = Number(v);
+  return Number.isFinite(f) && f >= LUX_FACTOR_MIN && f <= LUX_FACTOR_MAX ? f : 1;
+}
+
+/**
+ * Key for per-meter settings. Light Masters advertise as "LMaster_xxxx" with the
+ * last MAC bytes, which is unique per unit; otherwise fall back to the browser's
+ * device id (stable for this origin).
+ */
+export function meterKey(model, device) {
+  if (!device) return null;
+  const name = device.name || '';
+  const id = /_[0-9a-f]{4}$/i.test(name) ? name : device.id || name;
+  return id ? `${model || 'meter'}:${id}` : null;
+}
+
+/**
+ * Turn a raw measurement + calibration into the full processed reading.
+ * `luxFactor` is an optional user calibration (from a reference lux meter): it
+ * scales the calibrated channels, so lux, EML and CS scale with it and the
+ * colour results (CCT, Duv, CRI) are unchanged.
+ */
+export function processMeasurement(meas, cal, { luxFactor = 1 } = {}) {
   const kSensor = cal && cal.kSensor ? cal.kSensor : null;
+  const factor = sanitiseLuxFactor(luxFactor);
   if (meas.model === 'lm4') {
     const { channels } = lm4Calibrate(meas.raw, kSensor || new Array(9).fill(1));
-    const reading = lm4Process(channels);
-    return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, battery: lm4Battery(meas.batteryRaw), temperature: null, nir: meas.nir ?? null, ts: Date.now() };
+    const reading = lm4Process(channels.map((c) => c * factor));
+    return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, luxFactor: factor, battery: lm4Battery(meas.batteryRaw), temperature: null, nir: meas.nir ?? null, ts: Date.now() };
   }
   const { channels, c1 } = lm3Calibrate(meas.raw, kSensor || new Array(7).fill(1));
-  const reading = lm3Process(channels, c1);
-  return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, battery: lm3Battery(meas.batteryRaw), temperature: meas.temperature, ts: Date.now() };
+  const reading = lm3Process(channels.map((c) => c * factor), c1);
+  return { ...reading, raw: meas.raw, kSensor, calibrated: !!kSensor, luxFactor: factor, battery: lm3Battery(meas.batteryRaw), temperature: meas.temperature, ts: Date.now() };
 }
 
 export class OppleMeter extends EventTarget {

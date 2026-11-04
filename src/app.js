@@ -4,10 +4,10 @@
 // Bluetooth (see meter.js) and renders the live readout, a reading log
 // with CSV export, and a diagnostics panel.
 
-import { OppleMeter, bluetoothSupport, processMeasurement, releasePermittedDevices, advertisingState } from './meter.js';
+import { OppleMeter, bluetoothSupport, processMeasurement, releasePermittedDevices, advertisingState, meterKey, sanitiseLuxFactor, LUX_FACTOR_MIN, LUX_FACTOR_MAX } from './meter.js';
 import { cctToCss, wavelengthToCss } from './colour.js';
 
-const STORAGE = { log: 'slm.readings.v1' };
+const STORAGE = { log: 'slm.readings.v1', luxcal: 'slm.luxcal.v1' };
 const CAPTURE_SAMPLES = 8;
 const LIVE_SMOOTHING = 3;
 const DIAG_LINES = 500;
@@ -62,6 +62,7 @@ function template() {
     <span class="slm__chip" data-el="model" hidden></span>
     <span class="slm__chip" data-el="battery" hidden></span>
     <span class="slm__chip slm__chip--warn" data-el="uncal" hidden title="The meter did not return its calibration factors - readings are raw">uncalibrated</span>
+    <span class="slm__chip" data-el="luxcal-chip" hidden title="Your lux calibration for this meter is applied"></span>
   </div>
   <details class="slm__help" data-el="help">
     <summary class="slm__help-toggle">Trouble connecting?</summary>
@@ -69,6 +70,21 @@ function template() {
       <button class="slm__btn slm__btn--link" type="button" data-el="connect-all">Not listed? Show all devices</button>
       <p class="slm__help-note">Chrome only lists devices that look like a Light Master; this shows everything in range.</p>
       <button class="slm__btn slm__btn--link" type="button" data-el="force">Meter stuck? Force disconnect</button>
+    </div>
+  </details>
+  <details class="slm__help" data-el="luxcal" hidden>
+    <summary class="slm__help-toggle">Lux calibration</summary>
+    <div class="slm__help-panel">
+      <p class="slm__help-note slm__help-note--first">If this meter reads high or low against a lux meter you trust, hold both in the same spot and enter what the reference reads. The factor is saved in this browser for this meter only; colour readings are not affected.</p>
+      <div class="slm__luxcal-row">
+        <label class="slm__field"><span>Reference reads (lux)</span><input type="number" min="0" step="any" inputmode="decimal" data-el="luxcal-ref" placeholder="e.g. 2450"></label>
+        <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="luxcal-match">Match</button>
+      </div>
+      <div class="slm__luxcal-row">
+        <label class="slm__field"><span>Factor</span><input type="number" min="${LUX_FACTOR_MIN}" max="${LUX_FACTOR_MAX}" step="0.001" inputmode="decimal" data-el="luxcal-factor"></label>
+        <button class="slm__btn slm__btn--ghost slm__btn--sm" type="button" data-el="luxcal-apply">Apply</button>
+        <button class="slm__btn slm__btn--link" type="button" data-el="luxcal-reset">Reset to 1</button>
+      </div>
     </div>
   </details>
 </section>
@@ -160,6 +176,8 @@ export function mount(root) {
     rawHistory: [],
     capture: null, // { samples: [], resolve, reject }
     readings: store.get(STORAGE.log, []),
+    luxcal: store.get(STORAGE.luxcal, {}),
+    meterKey: null,
     diag: [],
     verbose: params.get('debug') === '2',
   };
@@ -260,8 +278,60 @@ export function mount(root) {
       els.model.hidden = true;
       els.battery.hidden = true;
       els.uncal.hidden = true;
+      state.meterKey = null;
+      renderLuxCal();
     }
   }
+
+  // -- lux calibration (per meter, this browser) ------------------------------
+  function luxFactor() {
+    return state.meterKey ? sanitiseLuxFactor(state.luxcal[state.meterKey]) : 1;
+  }
+
+  function renderLuxCal() {
+    const f = luxFactor();
+    els.luxcal.hidden = !state.meterKey;
+    els['luxcal-chip'].hidden = !state.meterKey || f === 1;
+    els['luxcal-chip'].textContent = `lux ×${f.toFixed(3)}`;
+    if (document.activeElement !== els['luxcal-factor']) els['luxcal-factor'].value = f.toFixed(3);
+  }
+
+  function setLuxFactor(f) {
+    if (!state.meterKey) return;
+    if (f === 1) delete state.luxcal[state.meterKey];
+    else state.luxcal[state.meterKey] = f;
+    store.set(STORAGE.luxcal, state.luxcal);
+    diag(`lux calibration for ${state.meterKey}: ×${f.toFixed(4)}`);
+    renderLuxCal();
+    if (state.meter && state.rawHistory.length) {
+      const cal = state.meter.calibration;
+      const live = processMeasurement({ model: state.meter.model, raw: averageRaw(state.rawHistory), batteryRaw: 0 }, cal, { luxFactor: f });
+      state.live = { ...live, battery: state.live ? state.live.battery : null, temperature: state.live ? state.live.temperature : null };
+      renderLive(state.live);
+    }
+  }
+
+  els['luxcal-match'].addEventListener('click', () => {
+    const ref = Number(els['luxcal-ref'].value);
+    const live = state.live;
+    const uncorrected = live && live.luxFactor ? live.lux / live.luxFactor : null;
+    if (!(ref > 0)) return toast('Enter what the reference meter reads, in lux', true);
+    if (!(uncorrected > 0.5)) return toast('No light reaching the sensor', true);
+    const f = ref / uncorrected;
+    if (sanitiseLuxFactor(f) !== f) return toast(`That needs a factor of ${f.toFixed(2)} - outside ${LUX_FACTOR_MIN}-${LUX_FACTOR_MAX}. Check both meters are in the same spot.`, true);
+    setLuxFactor(f);
+    toast(`Lux calibration set: ×${f.toFixed(3)}`);
+  });
+  els['luxcal-apply'].addEventListener('click', () => {
+    const f = Number(els['luxcal-factor'].value);
+    if (sanitiseLuxFactor(f) !== f) return toast(`Factor must be between ${LUX_FACTOR_MIN} and ${LUX_FACTOR_MAX}`, true);
+    setLuxFactor(f);
+    toast(f === 1 ? 'Lux calibration cleared' : `Lux calibration set: ×${f.toFixed(3)}`);
+  });
+  els['luxcal-reset'].addEventListener('click', () => {
+    setLuxFactor(1);
+    toast('Lux calibration cleared');
+  });
 
   function attach(meter) {
     if (state.meter && state.meter !== meter) {
@@ -282,6 +352,8 @@ export function mount(root) {
         els.model.hidden = false;
         els.uncal.hidden = !!(meter.calibration && meter.calibration.kSensor);
         els.reset.hidden = true;
+        state.meterKey = meterKey(meter.model, meter.device);
+        renderLuxCal();
       }
       if (e.detail.state === 'warning') toast(e.detail.message, true);
     });
@@ -388,7 +460,8 @@ export function mount(root) {
     const cal = meter.calibration;
     state.rawHistory.push(reading.raw);
     if (state.rawHistory.length > LIVE_SMOOTHING) state.rawHistory.shift();
-    const smoothed = state.rawHistory.length > 1 ? processMeasurement({ model: reading.model, raw: averageRaw(state.rawHistory), batteryRaw: 0 }, cal) : reading;
+    const opts = { luxFactor: luxFactor() };
+    const smoothed = processMeasurement({ model: reading.model, raw: averageRaw(state.rawHistory), batteryRaw: 0 }, cal, opts);
     state.live = { ...smoothed, battery: reading.battery, temperature: reading.temperature };
     renderLive(state.live);
 
@@ -397,7 +470,7 @@ export function mount(root) {
       const n = state.capture.samples.length;
       els.capture.textContent = `Averaging… ${n}/${CAPTURE_SAMPLES}`;
       if (n >= CAPTURE_SAMPLES) {
-        const avg = processMeasurement({ model: reading.model, raw: averageRaw(state.capture.samples), batteryRaw: 0 }, cal);
+        const avg = processMeasurement({ model: reading.model, raw: averageRaw(state.capture.samples), batteryRaw: 0 }, cal, opts);
         const done = state.capture;
         state.capture = null;
         els.capture.textContent = 'Log reading';
@@ -497,6 +570,7 @@ export function mount(root) {
         R: r.R,
         eml: r.eml,
         cs: r.cs,
+        luxFactor: r.luxFactor,
       });
       store.set(STORAGE.log, state.readings);
       renderReadings();
@@ -514,7 +588,7 @@ export function mount(root) {
   });
 
   els.export.addEventListener('click', () => {
-    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter'];
+    const cols = ['time', 'label', 'cct_k', 'lux', 'duv', 'tint', 'x', 'y', 'cri_ra', ...Array.from({ length: 14 }, (_, i) => `r${i + 1}`), 'eml', 'cs', 'meter', 'lux_factor'];
     const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
     for (const c of state.readings) {
@@ -533,6 +607,7 @@ export function mount(root) {
           c.eml === null || c.eml === undefined ? '' : c.eml.toFixed(0),
           c.cs === null || c.cs === undefined ? '' : c.cs.toFixed(3),
           c.model,
+          (c.luxFactor ?? 1).toFixed(4),
         ].join(','),
       );
     }
