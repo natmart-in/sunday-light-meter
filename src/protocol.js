@@ -18,7 +18,7 @@ export const OPCODE = {
   RES_MEAS: 0x0a01, // 2561
   REQ_CAL: 0x0a04, //  2564 read per-unit sensor calibration (kSensor)
   RES_CAL: 0x0a05, //  2565
-  REQ_FREQ: 0x0a0a, // 2570 flicker waveform (not used here)
+  REQ_FREQ: 0x0a0a, // 2570 flicker waveform
   RES_FREQ: 0x0a0b, // 2571
 };
 
@@ -28,7 +28,7 @@ const FRAG_MIDDLE = 0xa0;
 const FRAG_LAST = 0xc0;
 const FRAG_MASK = 0xe0;
 
-const HEADER_LEN = 11;
+export const HEADER_LEN = 11;
 
 /** Build the inner message: 11-byte header followed by the body. */
 export function buildCommand(opcode, seq, body = new Uint8Array(0)) {

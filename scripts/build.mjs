@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const ORDER = ['src/cie-data.js', 'src/lm4-model-data.js', 'src/lm3-recon-data.js', 'src/colour.js', 'src/protocol.js', 'src/lm3.js', 'src/lm4.js', 'src/meter.js', 'src/app.js'];
+const ORDER = ['src/cie-data.js', 'src/lm4-model-data.js', 'src/lm3-recon-data.js', 'src/colour.js', 'src/protocol.js', 'src/lm3.js', 'src/lm4.js', 'src/flicker.js', 'src/meter.js', 'src/app.js'];
 
 const seen = new Map();
 const parts = ORDER.map((file) => {
